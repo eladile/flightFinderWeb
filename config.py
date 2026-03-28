@@ -21,6 +21,7 @@ class Flight:
     date: str
     return_departure: str = ""
     return_arrival: str = ""
+    link: str = ""
 
 
 @dataclass

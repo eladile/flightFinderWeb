@@ -45,6 +45,7 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
         row = (
             f"<tr>"
             f"<td>{f.destination}</td>"
+            f"<td>{f.date}</td>"
             f"<td>{f.airline}</td>"
             f"<td>{f.departure_time}</td>"
             f"<td>{f.arrival_time}</td>"
@@ -52,7 +53,8 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
         )
         if roundtrip:
             row += f"<td>{f.return_departure}</td><td>{f.return_arrival}</td>"
-        row += f"<td>{f.price}</td></tr>"
+        row += f"<td>{f.price}</td>"
+        row += f'<td><a href="{f.link}">View</a></td></tr>'
         rows += row
 
     return_cols = ""
@@ -68,8 +70,8 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
     </style></head><body>
     <h2>Direct flights from {origin}</h2>
     <table>
-    <tr><th>Destination</th><th>Airline</th><th>Departure</th><th>Arrival</th>
-    <th>Duration</th>{return_cols}<th>Price</th></tr>
+    <tr><th>Destination</th><th>Date</th><th>Airline</th><th>Departure</th><th>Arrival</th>
+    <th>Duration</th>{return_cols}<th>Price</th><th>Link</th></tr>
     {rows}
     </table></body></html>"""
 
@@ -77,9 +79,9 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
 def _build_plain_text(flights: list[Flight], origin: str, roundtrip: bool) -> str:
     lines = [f"Direct flights from {origin}\n"]
     for f in flights:
-        line = f"  {f.destination} | {f.airline} | {f.departure_time}-{f.arrival_time} | {f.duration}"
+        line = f"  {f.destination} | {f.date} | {f.airline} | {f.departure_time}-{f.arrival_time} | {f.duration}"
         if roundtrip and f.return_departure:
             line += f" | Return: {f.return_departure}-{f.return_arrival}"
-        line += f" | {f.price}"
+        line += f" | {f.price} | {f.link}"
         lines.append(line)
     return "\n".join(lines)

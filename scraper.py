@@ -1,6 +1,8 @@
+import base64
 import logging
 import random
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
@@ -9,8 +11,159 @@ from config import Flight
 
 log = logging.getLogger(__name__)
 
-GOOGLE_FLIGHTS_URL = "https://www.google.com/travel/flights?hl=en&curr=EUR"
 SCREENSHOT_DIR = Path(__file__).parent / "screenshots"
+
+# Freebase/Knowledge Graph city IDs used by Google Flights.
+# Decoded from working Google Flights URLs — these are stable (Freebase frozen since 2016).
+CITY_KG_IDS = {
+    "TLV": "/m/07qzv",   # Tel Aviv
+    "AMS": "/m/0k3p",    # Amsterdam
+    "ATH": "/m/0n2z",    # Athens
+    "BCN": "/m/01f62",   # Barcelona
+    "BER": "/m/0156q",   # Berlin
+    "BRU": "/m/0177z",   # Brussels
+    "BUD": "/m/095w_",   # Budapest
+    "CDG": "/m/05qtj",   # Paris
+    "CPH": "/m/01lfy",   # Copenhagen
+    "FCO": "/m/06c62",   # Rome
+    "LHR": "/m/04jpl",   # London
+    "LIS": "/m/04llb",   # Lisbon
+    "MAD": "/m/056_y",   # Madrid
+    "MIL": "/m/0947l",   # Milan
+    "MUC": "/m/02h6_6p", # Munich
+    "OSL": "/m/05l64",   # Oslo
+    "PRG": "/m/05ywg",   # Prague
+    "SOF": "/m/0ftjx",   # Sofia
+    "VIE": "/m/0fhp9",   # Vienna
+    "WAW": "/m/081m_",   # Warsaw
+    "ZRH": "/m/08966",   # Zurich
+}
+
+
+# --- Protobuf helpers (minimal, just enough for Google Flights tfs param) ---
+
+def _pb_varint(value: int) -> bytes:
+    """Encode an unsigned integer as a protobuf varint."""
+    result = bytearray()
+    while value > 127:
+        result.append((value & 0x7F) | 0x80)
+        value >>= 7
+    result.append(value & 0x7F)
+    return bytes(result)
+
+
+def _pb_field_varint(field: int, value: int) -> bytes:
+    tag = _pb_varint((field << 3) | 0)
+    return tag + _pb_varint(value)
+
+
+def _pb_field_bytes(field: int, data: bytes) -> bytes:
+    tag = _pb_varint((field << 3) | 2)
+    return tag + _pb_varint(len(data)) + data
+
+
+def _pb_field_string(field: int, value: str) -> bytes:
+    return _pb_field_bytes(field, value.encode("utf-8"))
+
+
+def _build_search_url(
+    origin: str,
+    destination: str,
+    departure_date: str,
+    return_date: str | None = None,
+    currency: str = "EUR",
+) -> str:
+    """Build a Google Flights search URL using protobuf-encoded tfs parameter.
+
+    Matches the structure decoded from working Google Flights URLs:
+      field 1=28, field 2=num_legs, field 3=slice(s), plus flags 8,9,14,16,19.
+    """
+    origin_kg = CITY_KG_IDS.get(origin, origin)
+    dest_kg = CITY_KG_IDS.get(destination, destination)
+
+    # Place messages: field 1 = 2 (city type), field 2 = KG ID
+    origin_place = _pb_field_varint(1, 2) + _pb_field_string(2, origin_kg)
+    dest_place = _pb_field_varint(1, 2) + _pb_field_string(2, dest_kg)
+
+    # Outbound slice: field 2 = date, field 13 = origin, field 14 = dest
+    outbound = (
+        _pb_field_string(2, departure_date)
+        + _pb_field_bytes(13, origin_place)
+        + _pb_field_bytes(14, dest_place)
+    )
+
+    if return_date:
+        # Return slice: origin/dest swapped
+        return_slice = (
+            _pb_field_string(2, return_date)
+            + _pb_field_bytes(13, dest_place)
+            + _pb_field_bytes(14, origin_place)
+        )
+        tfs = (
+            _pb_field_varint(1, 28)
+            + _pb_field_varint(2, 2)
+            + _pb_field_bytes(3, outbound)
+            + _pb_field_bytes(3, return_slice)
+            + _pb_field_varint(8, 1)
+            + _pb_field_varint(9, 1)
+            + _pb_field_varint(14, 1)
+            + _pb_field_bytes(16, _pb_field_varint(1, (1 << 64) - 1))
+            + _pb_field_varint(19, 1)
+        )
+    else:
+        tfs = (
+            _pb_field_varint(1, 28)
+            + _pb_field_varint(2, 1)
+            + _pb_field_bytes(3, outbound)
+            + _pb_field_varint(8, 1)
+            + _pb_field_varint(9, 1)
+            + _pb_field_varint(14, 1)
+            + _pb_field_bytes(16, _pb_field_varint(1, (1 << 64) - 1))
+            + _pb_field_varint(19, 1)
+        )
+
+    encoded = base64.urlsafe_b64encode(tfs).rstrip(b"=").decode("ascii")
+    return f"https://www.google.com/travel/flights/search?tfs={encoded}&hl=en&curr={currency}"
+
+
+def _generate_date_pairs(
+    outbound_from: str,
+    outbound_to: str,
+    return_from: str,
+    return_to: str,
+) -> list[tuple[str, str | None]]:
+    """Generate (departure_date, return_date) pairs to search.
+
+    For one-way: yields (date, None) for each day in outbound range.
+    For roundtrip: yields (date, return_date) with a fixed offset from
+    outbound_from to return_from, capped at return_to.
+    """
+    fmt = "%Y-%m-%d"
+    start = datetime.strptime(outbound_from, fmt)
+    end = datetime.strptime(outbound_to, fmt)
+
+    if not return_from:
+        pairs = []
+        current = start
+        while current <= end:
+            pairs.append((current.strftime(fmt), None))
+            current += timedelta(days=1)
+        return pairs
+
+    ret_start = datetime.strptime(return_from, fmt)
+    ret_end = datetime.strptime(return_to, fmt)
+    offset = (ret_start - start).days
+
+    pairs = []
+    current = start
+    while current <= end:
+        ret_date = current + timedelta(days=offset)
+        if ret_date > ret_end:
+            ret_date = ret_end
+        if ret_date > current:
+            pairs.append((current.strftime(fmt), ret_date.strftime(fmt)))
+        current += timedelta(days=1)
+    return pairs
 
 
 def search_flights(
@@ -22,9 +175,13 @@ def search_flights(
     return_to: str,
     headless: bool = True,
 ) -> list[Flight]:
-    """Search Google Flights for direct flights to each destination."""
+    """Search Google Flights for direct flights, iterating over dates and destinations."""
     SCREENSHOT_DIR.mkdir(exist_ok=True)
     all_flights: list[Flight] = []
+
+    date_pairs = _generate_date_pairs(date_from, date_to, return_from, return_to)
+    total = len(date_pairs) * len(destinations)
+    log.info(f"Planning {total} searches ({len(date_pairs)} dates x {len(destinations)} destinations)")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -34,179 +191,48 @@ def search_flights(
         )
         page = context.new_page()
 
-        for dest in destinations:
-            try:
-                flights = _search_destination(
-                    page, origin, dest, date_from, date_to,
-                    return_from, return_to,
-                )
-                if flights:
-                    log.info(f"  Found {len(flights)} flights to {dest}")
-                    all_flights.extend(flights)
-                else:
-                    log.info(f"  No direct flights to {dest}")
-            except Exception as e:
-                log.warning(f"  Error searching {dest}: {e}")
+        search_num = 0
+        for departure_date, return_date in date_pairs:
+            for dest in destinations:
+                search_num += 1
                 try:
-                    page.screenshot(path=str(SCREENSHOT_DIR / f"error_{dest}.png"))
-                except Exception:
-                    pass
+                    label = f"{origin}->{dest} on {departure_date}"
+                    if return_date:
+                        label += f" ret {return_date}"
+                    log.info(f"  [{search_num}/{total}] {label}")
 
-            # Random delay between searches (1-3 seconds)
-            time.sleep(random.uniform(1, 3))
+                    flights = _search_single(page, origin, dest, departure_date, return_date)
+                    if flights:
+                        log.info(f"    Found {len(flights)} flights")
+                        all_flights.extend(flights)
+                    else:
+                        log.info(f"    No direct flights")
+                except Exception as e:
+                    log.warning(f"    Error: {e}")
+                    try:
+                        page.screenshot(path=str(SCREENSHOT_DIR / f"error_{dest}_{departure_date}.png"))
+                    except Exception:
+                        pass
+
+                time.sleep(random.uniform(1, 3))
 
         browser.close()
 
     return all_flights
 
 
-def _search_destination(
+def _search_single(
     page: Page,
     origin: str,
     destination: str,
-    date_from: str,
-    date_to: str,
-    return_from: str,
-    return_to: str,
+    departure_date: str,
+    return_date: str | None,
 ) -> list[Flight]:
-    """Search flights for a single destination."""
-    page.goto(GOOGLE_FLIGHTS_URL, wait_until="networkidle")
+    """Search flights for a single destination on a single date via URL navigation."""
+    url = _build_search_url(origin, destination, departure_date, return_date)
+    page.goto(url, wait_until="networkidle")
 
-    # Dismiss cookie consent if present
     _dismiss_consent(page)
-
-    # Set trip type to one-way if no return dates
-    if not return_from:
-        _set_oneway(page)
-
-    # Fill origin
-    _fill_airport(page, "Where from?", origin)
-
-    # Fill destination
-    _fill_airport(page, "Where to?", destination)
-
-    # Set departure date
-    _set_date(page, "Departure", date_from)
-
-    # If roundtrip, set return date
-    if return_from:
-        _set_date(page, "Return", return_from)
-
-    # Click search
-    _click_search(page)
-
-    # Apply nonstop filter
-    _apply_nonstop_filter(page)
-
-    # Scrape results
-    return _scrape_results(page, destination)
-
-
-def _dismiss_consent(page: Page):
-    """Dismiss cookie consent banner if present."""
-    try:
-        # Google consent dialog
-        accept_btn = page.locator("button:has-text('Accept all')")
-        if accept_btn.count() > 0:
-            accept_btn.first.click()
-            page.wait_for_timeout(1000)
-    except Exception:
-        pass
-
-
-def _set_oneway(page: Page):
-    """Set trip type to one-way."""
-    try:
-        # Click the trip type dropdown
-        trip_selector = page.locator("[aria-label='Round trip']").or_(
-            page.locator("[aria-label='One way']")
-        )
-        if trip_selector.count() > 0:
-            trip_selector.first.click()
-            page.wait_for_timeout(500)
-            # Select "One way" from dropdown
-            oneway_option = page.locator("li:has-text('One way')")
-            if oneway_option.count() > 0:
-                oneway_option.first.click()
-                page.wait_for_timeout(500)
-    except Exception as e:
-        log.debug(f"Could not set one-way: {e}")
-
-
-def _fill_airport(page: Page, label: str, code: str):
-    """Fill in an airport input field."""
-    input_field = page.locator(f"input[aria-label='{label}']").or_(
-        page.locator(f"input[placeholder='{label}']")
-    )
-    input_field.first.click()
-    page.wait_for_timeout(300)
-
-    # Clear existing text and type the code
-    input_field.first.fill("")
-    input_field.first.type(code, delay=50)
-    page.wait_for_timeout(1000)
-
-    # Click the first suggestion in the dropdown
-    suggestion = page.locator("li[role='option']").or_(
-        page.locator("[data-value] li").first
-    )
-    if suggestion.count() > 0:
-        suggestion.first.click()
-        page.wait_for_timeout(500)
-    else:
-        # Press Enter to confirm
-        input_field.first.press("Enter")
-        page.wait_for_timeout(500)
-
-
-def _set_date(page: Page, label: str, date_str: str):
-    """Set a date using the date picker. date_str is YYYY-MM-DD."""
-    try:
-        date_input = page.locator(f"input[aria-label*='{label}']")
-        if date_input.count() > 0:
-            date_input.first.click()
-            page.wait_for_timeout(500)
-
-            # Try selecting the date via data-iso attribute in calendar
-            date_cell = page.locator(f"[data-iso='{date_str}']")
-            if date_cell.count() > 0:
-                date_cell.first.click()
-                page.wait_for_timeout(300)
-            else:
-                # Fallback: clear and type the date
-                date_input.first.fill("")
-                # Format as displayed (e.g., "Apr 1" or "Mon, Apr 1")
-                from datetime import datetime
-                dt = datetime.strptime(date_str, "%Y-%m-%d")
-                formatted = dt.strftime("%b %-d")
-                date_input.first.type(formatted, delay=50)
-                page.wait_for_timeout(500)
-                date_input.first.press("Enter")
-
-            # Click "Done" button if present
-            done_btn = page.locator("button:has-text('Done')")
-            if done_btn.count() > 0:
-                done_btn.first.click()
-                page.wait_for_timeout(300)
-    except Exception as e:
-        log.debug(f"Could not set date for {label}: {e}")
-
-
-def _click_search(page: Page):
-    """Click the search/explore button."""
-    search_btn = page.locator("button[aria-label='Search']").or_(
-        page.locator("button[aria-label*='Search']")
-    ).or_(
-        page.locator("button:has-text('Search')")
-    ).or_(
-        page.locator("button:has-text('Explore')")
-    )
-
-    if search_btn.count() > 0:
-        search_btn.first.click()
-    else:
-        # Fallback: press Enter
-        page.keyboard.press("Enter")
 
     # Wait for results to load
     try:
@@ -215,11 +241,26 @@ def _click_search(page: Page):
         pass
     page.wait_for_timeout(2000)
 
+    # Safety net: apply nonstop filter via UI if URL param didn't work
+    _apply_nonstop_filter(page)
+
+    return _scrape_results(page, destination, departure_date, url)
+
+
+def _dismiss_consent(page: Page):
+    """Dismiss cookie consent banner if present."""
+    try:
+        accept_btn = page.locator("button:has-text('Accept all')")
+        if accept_btn.count() > 0:
+            accept_btn.first.click()
+            page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
 
 def _apply_nonstop_filter(page: Page):
     """Apply the nonstop-only stops filter."""
     try:
-        # Look for the "Stops" filter button/dropdown
         stops_btn = page.locator("button:has-text('Stops')").or_(
             page.locator("[aria-label*='stops']").or_(
                 page.locator("span:has-text('Stops')")
@@ -230,7 +271,6 @@ def _apply_nonstop_filter(page: Page):
             stops_btn.first.click()
             page.wait_for_timeout(500)
 
-            # Select "Nonstop only"
             nonstop = page.locator("label:has-text('Nonstop only')").or_(
                 page.locator("li:has-text('Nonstop only')")
             ).or_(
@@ -240,7 +280,6 @@ def _apply_nonstop_filter(page: Page):
                 nonstop.first.click()
                 page.wait_for_timeout(500)
 
-            # Close the filter dropdown
             close_btn = page.locator("button:has-text('Close')").or_(
                 page.locator("button[aria-label='Close']")
             )
@@ -254,15 +293,13 @@ def _apply_nonstop_filter(page: Page):
         log.debug(f"Could not apply nonstop filter: {e}")
 
 
-def _scrape_results(page: Page, destination: str) -> list[Flight]:
+def _scrape_results(page: Page, destination: str, departure_date: str, link: str) -> list[Flight]:
     """Scrape flight results from the current page."""
     flights: list[Flight] = []
 
-    # Wait for flight result cards
     try:
         page.wait_for_selector("li.pIav2d", timeout=10000)
     except PlaywrightTimeout:
-        # No results found
         return flights
 
     result_cards = page.locator("li.pIav2d")
@@ -271,7 +308,7 @@ def _scrape_results(page: Page, destination: str) -> list[Flight]:
     for i in range(count):
         try:
             card = result_cards.nth(i)
-            flight = _parse_flight_card(card, destination)
+            flight = _parse_flight_card(card, destination, departure_date, link)
             if flight:
                 flights.append(flight)
         except Exception as e:
@@ -280,33 +317,25 @@ def _scrape_results(page: Page, destination: str) -> list[Flight]:
     return flights
 
 
-def _parse_flight_card(card, destination: str) -> Flight | None:
+def _parse_flight_card(card, destination: str, departure_date: str, link: str) -> Flight | None:
     """Parse a single flight result card into a Flight object."""
     try:
-        # Airline
         airline_el = card.locator("div.sSHqwe").or_(card.locator("[data-test-id='airline']"))
         airline = airline_el.first.inner_text().strip() if airline_el.count() > 0 else "Unknown"
 
-        # Departure time
         dep_el = card.locator("span[aria-label^='Departure time']")
         departure_time = dep_el.first.inner_text().strip() if dep_el.count() > 0 else ""
 
-        # Arrival time
         arr_el = card.locator("span[aria-label^='Arrival time']")
         arrival_time = arr_el.first.inner_text().strip() if arr_el.count() > 0 else ""
 
-        # Duration
         dur_el = card.locator("div[aria-label^='Total duration']")
         duration = dur_el.first.inner_text().strip() if dur_el.count() > 0 else ""
 
-        # Price
         price_el = card.locator("div.FpEdX span").or_(card.locator("[data-test-id='price']"))
         price = price_el.first.inner_text().strip() if price_el.count() > 0 else ""
 
-        # Date (from the page context, not the card)
-        date = ""
-
-        if not departure_time and not price:
+        if not departure_time or not price or "unavailable" in price.lower():
             return None
 
         return Flight(
@@ -316,7 +345,8 @@ def _parse_flight_card(card, destination: str) -> Flight | None:
             arrival_time=arrival_time,
             duration=duration,
             price=price,
-            date=date,
+            date=departure_date,
+            link=link,
         )
     except Exception:
         return None
