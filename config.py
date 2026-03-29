@@ -19,6 +19,7 @@ class Flight:
     duration: str
     price: str
     date: str
+    stops: str = "Nonstop"
     return_departure: str = ""
     return_arrival: str = ""
     link: str = ""
@@ -36,6 +37,7 @@ class Config:
     return_from: str = ""
     return_to: str = ""
     trip_type: str = "oneway"
+    stops: str = "any"
     headless: bool = True
 
 
@@ -61,6 +63,11 @@ def load_config() -> Config:
     trip_type = os.getenv("TRIP_TYPE", "oneway").lower()
     if trip_type not in ("oneway", "roundtrip"):
         print(f"Error: TRIP_TYPE must be 'oneway' or 'roundtrip', got '{trip_type}'", file=sys.stderr)
+        sys.exit(1)
+
+    stops = os.getenv("STOPS", "any").lower()
+    if stops not in ("any", "nonstop"):
+        print(f"Error: STOPS must be 'any' or 'nonstop', got '{stops}'", file=sys.stderr)
         sys.exit(1)
 
     return_from = os.getenv("RETURN_FROM", "")
@@ -100,5 +107,6 @@ def load_config() -> Config:
         return_from=return_from,
         return_to=return_to,
         trip_type=trip_type,
+        stops=stops,
         headless=os.getenv("HEADLESS", "true").lower() == "true",
     )

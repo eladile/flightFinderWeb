@@ -21,7 +21,7 @@ def send_flight_alert(
 ) -> None:
     """Send an HTML email with flight results via Gmail SMTP."""
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Direct flights found from {origin} — {len(flights)} result(s)"
+    msg["Subject"] = f"Flights found from {origin} — {len(flights)} result(s)"
     msg["From"] = smtp_email
     msg["To"] = email_to
 
@@ -50,6 +50,7 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
             f"<td>{f.departure_time}</td>"
             f"<td>{f.arrival_time}</td>"
             f"<td>{f.duration}</td>"
+            f"<td>{f.stops}</td>"
         )
         if roundtrip:
             row += f"<td>{f.return_departure}</td><td>{f.return_arrival}</td>"
@@ -68,18 +69,18 @@ def _build_html(flights: list[Flight], origin: str, roundtrip: bool) -> str:
     tr:nth-child(even) {{ background-color: #f2f2f2; }}
     h2 {{ color: #333; }}
     </style></head><body>
-    <h2>Direct flights from {origin}</h2>
+    <h2>Flights from {origin}</h2>
     <table>
     <tr><th>Destination</th><th>Date</th><th>Airline</th><th>Departure</th><th>Arrival</th>
-    <th>Duration</th>{return_cols}<th>Price</th><th>Link</th></tr>
+    <th>Duration</th><th>Stops</th>{return_cols}<th>Price</th><th>Link</th></tr>
     {rows}
     </table></body></html>"""
 
 
 def _build_plain_text(flights: list[Flight], origin: str, roundtrip: bool) -> str:
-    lines = [f"Direct flights from {origin}\n"]
+    lines = [f"Flights from {origin}\n"]
     for f in flights:
-        line = f"  {f.destination} | {f.date} | {f.airline} | {f.departure_time}-{f.arrival_time} | {f.duration}"
+        line = f"  {f.destination} | {f.date} | {f.airline} | {f.departure_time}-{f.arrival_time} | {f.duration} | {f.stops}"
         if roundtrip and f.return_departure:
             line += f" | Return: {f.return_departure}-{f.return_arrival}"
         line += f" | {f.price} | {f.link}"

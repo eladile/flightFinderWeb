@@ -78,12 +78,19 @@ def _build_search_url(
     Matches the structure decoded from working Google Flights URLs:
       field 1=28, field 2=num_legs, field 3=slice(s), plus flags 8,9,14,16,19.
     """
-    origin_kg = CITY_KG_IDS.get(origin, origin)
-    dest_kg = CITY_KG_IDS.get(destination, destination)
+    origin_kg = CITY_KG_IDS.get(origin)
+    dest_kg = CITY_KG_IDS.get(destination)
 
-    # Place messages: field 1 = 2 (city type), field 2 = KG ID
-    origin_place = _pb_field_varint(1, 2) + _pb_field_string(2, origin_kg)
-    dest_place = _pb_field_varint(1, 2) + _pb_field_string(2, dest_kg)
+    # Place type 2 = city (KG ID), type 1 = airport (IATA code)
+    if origin_kg:
+        origin_place = _pb_field_varint(1, 2) + _pb_field_string(2, origin_kg)
+    else:
+        origin_place = _pb_field_varint(1, 1) + _pb_field_string(2, origin)
+
+    if dest_kg:
+        dest_place = _pb_field_varint(1, 2) + _pb_field_string(2, dest_kg)
+    else:
+        dest_place = _pb_field_varint(1, 1) + _pb_field_string(2, destination)
 
     # Outbound slice: field 2 = date, field 13 = origin, field 14 = dest
     outbound = (
@@ -173,9 +180,10 @@ def search_flights(
     date_to: str,
     return_from: str,
     return_to: str,
+    stops: str = "any",
     headless: bool = True,
 ) -> list[Flight]:
-    """Search Google Flights for direct flights, iterating over dates and destinations."""
+    """Search Google Flights for flights, iterating over dates and destinations."""
     SCREENSHOT_DIR.mkdir(exist_ok=True)
     all_flights: list[Flight] = []
 
@@ -201,12 +209,12 @@ def search_flights(
                         label += f" ret {return_date}"
                     log.info(f"  [{search_num}/{total}] {label}")
 
-                    flights = _search_single(page, origin, dest, departure_date, return_date)
+                    flights = _search_single(page, origin, dest, departure_date, return_date, stops)
                     if flights:
                         log.info(f"    Found {len(flights)} flights")
                         all_flights.extend(flights)
                     else:
-                        log.info(f"    No direct flights")
+                        log.info(f"    No flights")
                 except Exception as e:
                     log.warning(f"    Error: {e}")
                     try:
@@ -227,6 +235,7 @@ def _search_single(
     destination: str,
     departure_date: str,
     return_date: str | None,
+    stops: str = "any",
 ) -> list[Flight]:
     """Search flights for a single destination on a single date via URL navigation."""
     url = _build_search_url(origin, destination, departure_date, return_date)
@@ -241,8 +250,8 @@ def _search_single(
         pass
     page.wait_for_timeout(2000)
 
-    # Safety net: apply nonstop filter via UI if URL param didn't work
-    _apply_nonstop_filter(page)
+    if stops == "nonstop":
+        _apply_nonstop_filter(page)
 
     return _scrape_results(page, destination, departure_date, url)
 
@@ -332,6 +341,13 @@ def _parse_flight_card(card, destination: str, departure_date: str, link: str) -
         dur_el = card.locator("div[aria-label^='Total duration']")
         duration = dur_el.first.inner_text().strip() if dur_el.count() > 0 else ""
 
+        stops_el = card.locator("div.EfT7Ae span.ogfYpf")
+        if stops_el.count() > 0:
+            stops = stops_el.first.inner_text().strip()
+        else:
+            stops_el = card.locator("span:has-text('stop')").or_(card.locator("span:has-text('Nonstop')"))
+            stops = stops_el.first.inner_text().strip() if stops_el.count() > 0 else ""
+
         price_el = card.locator("div.FpEdX span").or_(card.locator("[data-test-id='price']"))
         price = price_el.first.inner_text().strip() if price_el.count() > 0 else ""
 
@@ -346,6 +362,7 @@ def _parse_flight_card(card, destination: str, departure_date: str, link: str) -
             duration=duration,
             price=price,
             date=departure_date,
+            stops=stops,
             link=link,
         )
     except Exception:

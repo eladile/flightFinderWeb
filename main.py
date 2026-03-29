@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""flightFinderWeb — scrape Google Flights for direct flights and send email alerts."""
+"""flightFinderWeb — scrape Google Flights for flights and send email alerts."""
 
 import logging
 import sys
@@ -22,7 +22,7 @@ def main():
 
     log.info(
         f"Searching {len(cfg.destinations)} destinations from {cfg.origin} "
-        f"({cfg.outbound_from} to {cfg.outbound_to}, trip: {cfg.trip_type})"
+        f"({cfg.outbound_from} to {cfg.outbound_to}, trip: {cfg.trip_type}, stops: {cfg.stops})"
     )
 
     flights = search_flights(
@@ -32,6 +32,7 @@ def main():
         date_to=cfg.outbound_to,
         return_from=cfg.return_from,
         return_to=cfg.return_to,
+        stops=cfg.stops,
         headless=cfg.headless,
     )
 

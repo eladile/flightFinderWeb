@@ -1,5 +1,5 @@
-# flightFinderWeb — scrape Google Flights for direct flights every hour
+# flightFinderWeb — scrape Google Flights for direct flights every 6 hours
 # Install with: (crontab -l 2>/dev/null; cat cron/flightfinder.cron) | crontab -
 # Remove with:  crontab -e  (and delete the line)
 
-0 * * * * /Users/eeisenberg/work/src/flightFinderWeb/cron/run.sh >> /var/log/flightfinder.log 2>&1
+0 */2 * * * /Users/eeisenberg/work/src/flightFinderWeb/cron/run.sh >> /var/log/flightfinder.log 2>&1
