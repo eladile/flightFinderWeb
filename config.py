@@ -66,8 +66,8 @@ def load_config() -> Config:
         sys.exit(1)
 
     stops = os.getenv("STOPS", "any").lower()
-    if stops not in ("any", "nonstop"):
-        print(f"Error: STOPS must be 'any' or 'nonstop', got '{stops}'", file=sys.stderr)
+    if stops not in ("any", "nonstop") and not stops.isdigit():
+        print(f"Error: STOPS must be 'any', 'nonstop', or a number (e.g. '1'), got '{stops}'", file=sys.stderr)
         sys.exit(1)
 
     return_from = os.getenv("RETURN_FROM", "")

@@ -229,6 +229,17 @@ def search_flights(
     return all_flights
 
 
+def _count_stops(stops_text: str) -> int:
+    """Parse stop count from Google Flights text like 'Nonstop', '1 stop', '2 stops'."""
+    text = stops_text.strip().lower()
+    if not text or "nonstop" in text:
+        return 0
+    for word in text.split():
+        if word.isdigit():
+            return int(word)
+    return 999
+
+
 def _search_single(
     page: Page,
     origin: str,
@@ -253,7 +264,13 @@ def _search_single(
     if stops == "nonstop":
         _apply_nonstop_filter(page)
 
-    return _scrape_results(page, destination, departure_date, url)
+    flights = _scrape_results(page, destination, departure_date, url)
+
+    if stops.isdigit():
+        max_stops = int(stops)
+        flights = [f for f in flights if _count_stops(f.stops) <= max_stops]
+
+    return flights
 
 
 def _dismiss_consent(page: Page):
