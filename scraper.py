@@ -120,13 +120,13 @@ def _build_search_url(
     else:
         tfs = (
             _pb_field_varint(1, 28)
-            + _pb_field_varint(2, 1)
+            + _pb_field_varint(2, 2)
             + _pb_field_bytes(3, outbound)
             + _pb_field_varint(8, 1)
             + _pb_field_varint(9, 1)
             + _pb_field_varint(14, 1)
             + _pb_field_bytes(16, _pb_field_varint(1, (1 << 64) - 1))
-            + _pb_field_varint(19, 1)
+            + _pb_field_varint(19, 2)
         )
 
     encoded = base64.urlsafe_b64encode(tfs).rstrip(b"=").decode("ascii")
