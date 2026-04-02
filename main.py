@@ -30,8 +30,8 @@ def main():
         destinations=cfg.destinations,
         date_from=cfg.outbound_from,
         date_to=cfg.outbound_to,
-        return_from=cfg.return_from,
-        return_to=cfg.return_to,
+        return_from=cfg.return_from if roundtrip else "",
+        return_to=cfg.return_to if roundtrip else "",
         stops=cfg.stops,
         headless=cfg.headless,
     )
