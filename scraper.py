@@ -381,6 +381,7 @@ def _parse_flight_card(card, destination: str, departure_date: str, link: str) -
             date=departure_date,
             stops=stops,
             link=link,
+            source="google",
         )
     except Exception:
         return None

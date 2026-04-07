@@ -23,6 +23,7 @@ class Flight:
     return_departure: str = ""
     return_arrival: str = ""
     link: str = ""
+    source: str = ""
 
 
 @dataclass
@@ -38,6 +39,7 @@ class Config:
     return_to: str = ""
     trip_type: str = "oneway"
     stops: str = "any"
+    providers: list[str] = field(default_factory=lambda: ["google", "skyscanner"])
     headless: bool = True
 
 
@@ -96,6 +98,14 @@ def load_config() -> Config:
                 print(f"Error: invalid airport code '{code}' in DESTINATION", file=sys.stderr)
                 sys.exit(1)
 
+    providers_raw = os.getenv("PROVIDERS", "google,skyscanner")
+    providers = [p.strip().lower() for p in providers_raw.split(",")]
+    valid_providers = {"google", "skyscanner"}
+    for p in providers:
+        if p not in valid_providers:
+            print(f"Error: unknown provider '{p}', must be one of: {', '.join(sorted(valid_providers))}", file=sys.stderr)
+            sys.exit(1)
+
     return Config(
         smtp_email=required["SMTP_EMAIL"],
         smtp_password=required["SMTP_PASSWORD"],
@@ -108,5 +118,6 @@ def load_config() -> Config:
         return_to=return_to,
         trip_type=trip_type,
         stops=stops,
+        providers=providers,
         headless=os.getenv("HEADLESS", "true").lower() == "true",
     )
