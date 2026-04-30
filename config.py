@@ -24,6 +24,9 @@ class Flight:
     return_arrival: str = ""
     link: str = ""
     source: str = ""
+    layover_info: str = ""
+    return_date: str = ""
+    price_type: str = ""
 
 
 @dataclass

@@ -264,7 +264,7 @@ def _search_single(
     if stops == "nonstop":
         _apply_nonstop_filter(page)
 
-    flights = _scrape_results(page, destination, departure_date, url)
+    flights = _scrape_results(page, destination, departure_date, return_date, url)
 
     if stops.isdigit():
         max_stops = int(stops)
@@ -319,7 +319,7 @@ def _apply_nonstop_filter(page: Page):
         log.debug(f"Could not apply nonstop filter: {e}")
 
 
-def _scrape_results(page: Page, destination: str, departure_date: str, link: str) -> list[Flight]:
+def _scrape_results(page: Page, destination: str, departure_date: str, return_date: str | None, link: str) -> list[Flight]:
     """Scrape flight results from the current page."""
     flights: list[Flight] = []
 
@@ -334,7 +334,7 @@ def _scrape_results(page: Page, destination: str, departure_date: str, link: str
     for i in range(count):
         try:
             card = result_cards.nth(i)
-            flight = _parse_flight_card(card, destination, departure_date, link)
+            flight = _parse_flight_card(card, destination, departure_date, return_date, link)
             if flight:
                 flights.append(flight)
         except Exception as e:
@@ -343,7 +343,7 @@ def _scrape_results(page: Page, destination: str, departure_date: str, link: str
     return flights
 
 
-def _parse_flight_card(card, destination: str, departure_date: str, link: str) -> Flight | None:
+def _parse_flight_card(card, destination: str, departure_date: str, return_date: str | None, link: str) -> Flight | None:
     """Parse a single flight result card into a Flight object."""
     try:
         airline_el = card.locator("div.sSHqwe").or_(card.locator("[data-test-id='airline']"))
@@ -365,8 +365,28 @@ def _parse_flight_card(card, destination: str, departure_date: str, link: str) -
             stops_el = card.locator("span:has-text('stop')").or_(card.locator("span:has-text('Nonstop')"))
             stops = stops_el.first.inner_text().strip() if stops_el.count() > 0 else ""
 
+        layover_info = ""
+        if stops and "nonstop" not in stops.lower():
+            layover_el = card.locator("div.BbR8Ec > div.sSHqwe[aria-label*='ayover']")
+            if layover_el.count() > 0:
+                layover_info = layover_el.first.inner_text().strip()
+            else:
+                stops_area = card.locator("div.BbR8Ec")
+                if stops_area.count() > 0:
+                    full_text = stops_area.first.inner_text().strip()
+                    lines = full_text.split("\n")
+                    if len(lines) > 1:
+                        layover_info = lines[1].strip()
+
         price_el = card.locator("div.FpEdX span").or_(card.locator("[data-test-id='price']"))
         price = price_el.first.inner_text().strip() if price_el.count() > 0 else ""
+
+        price_type = ""
+        price_type_el = card.locator("div.N872Rd")
+        if price_type_el.count() > 0:
+            price_type = price_type_el.first.inner_text().strip().lower()
+        if not price_type and return_date:
+            price_type = "round trip"
 
         if not departure_time or not price or "unavailable" in price.lower():
             return None
@@ -382,6 +402,9 @@ def _parse_flight_card(card, destination: str, departure_date: str, link: str) -
             stops=stops,
             link=link,
             source="google",
+            layover_info=layover_info,
+            return_date=return_date or "",
+            price_type=price_type,
         )
     except Exception:
         return None

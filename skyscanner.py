@@ -88,6 +88,8 @@ def search_flights(
                 stops="—",
                 link=url,
                 source="skyscanner",
+                return_date=return_date or "",
+                price_type="round trip" if return_date else "one way",
             ))
 
     log.info(f"[Skyscanner] Generated {len(flights)} links")
