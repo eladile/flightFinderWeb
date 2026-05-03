@@ -319,6 +319,9 @@ def _apply_nonstop_filter(page: Page):
         log.debug(f"Could not apply nonstop filter: {e}")
 
 
+RETURN_TOP_N = 5
+
+
 def _scrape_results(page: Page, destination: str, departure_date: str, return_date: str | None, link: str) -> list[Flight]:
     """Scrape flight results from the current page."""
     flights: list[Flight] = []
@@ -340,7 +343,111 @@ def _scrape_results(page: Page, destination: str, departure_date: str, return_da
         except Exception as e:
             log.debug(f"Could not parse flight card {i}: {e}")
 
+    if return_date and flights:
+        _scrape_return_details(page, flights)
+
     return flights
+
+
+def _scrape_return_details(page: Page, flights: list[Flight]) -> None:
+    """Click 'Select flight' on top N outbound cards and scrape the best return flight."""
+    original_url = page.url
+    n = min(RETURN_TOP_N, len(flights))
+    for i in range(n):
+        try:
+            cards = page.locator("li.pIav2d")
+            if cards.count() <= i:
+                log.debug(f"Return scrape {i}: only {cards.count()} cards on page")
+                break
+
+            card = cards.nth(i)
+            select_el = card.locator("div.JMc5Xc[role='link']")
+            if select_el.count() == 0:
+                select_el = card.locator("button[aria-label='Select flight']")
+            if select_el.count() == 0:
+                log.debug(f"Return scrape {i}: no clickable element found")
+                continue
+
+            select_el.first.click(force=True)
+
+            try:
+                page.wait_for_url(lambda url: url != original_url, timeout=10000)
+                page.wait_for_selector("li.pIav2d", timeout=10000)
+                page.wait_for_timeout(1500)
+            except PlaywrightTimeout:
+                log.debug(f"Return scrape {i}: timeout waiting for return page")
+                page.goto(original_url, wait_until="networkidle")
+                page.wait_for_timeout(2000)
+                continue
+
+            return_page_url = page.url
+
+            return_card = page.locator("li.pIav2d").first
+            ret = _parse_return_card(return_card)
+            if ret:
+                flights[i].return_departure = ret["departure"]
+                flights[i].return_arrival = ret["arrival"]
+                flights[i].return_airline = ret["airline"]
+                flights[i].return_duration = ret["duration"]
+                flights[i].return_stops = ret["stops"]
+                log.debug(f"Return scrape {i}: {ret['airline']} {ret['departure']}-{ret['arrival']}")
+
+                ret_select = return_card.locator("div.JMc5Xc[role='link']")
+                if ret_select.count() == 0:
+                    ret_select = return_card.locator("button[aria-label='Select flight']")
+                if ret_select.count() > 0:
+                    ret_select.first.click(force=True)
+                    try:
+                        page.wait_for_url(lambda url: url != return_page_url, timeout=10000)
+                        flights[i].link = page.url
+                    except PlaywrightTimeout:
+                        flights[i].link = return_page_url
+                else:
+                    flights[i].link = return_page_url
+            else:
+                log.debug(f"Return scrape {i}: could not parse return card")
+                flights[i].link = return_page_url
+
+            page.goto(original_url, wait_until="networkidle")
+            page.wait_for_timeout(2000)
+
+        except Exception as e:
+            log.debug(f"Could not scrape return for flight {i}: {e}")
+            try:
+                page.goto(original_url, wait_until="networkidle")
+                page.wait_for_timeout(2000)
+            except Exception:
+                pass
+
+
+def _parse_return_card(card) -> dict | None:
+    """Parse departure, arrival, airline, duration, stops from a return flight card."""
+    try:
+        dep_el = card.locator("span[aria-label^='Departure time']")
+        departure = dep_el.first.inner_text().strip() if dep_el.count() > 0 else ""
+
+        arr_el = card.locator("span[aria-label^='Arrival time']")
+        arrival = arr_el.first.inner_text().strip() if arr_el.count() > 0 else ""
+
+        airline_el = card.locator("div.sSHqwe").or_(card.locator("[data-test-id='airline']"))
+        airline = airline_el.first.inner_text().strip() if airline_el.count() > 0 else ""
+
+        dur_el = card.locator("div[aria-label^='Total duration']")
+        duration = dur_el.first.inner_text().strip() if dur_el.count() > 0 else ""
+
+        stops_el = card.locator("div.EfT7Ae span.ogfYpf")
+        if stops_el.count() > 0:
+            stops = stops_el.first.inner_text().strip()
+        else:
+            stops_el = card.locator("span:has-text('stop')").or_(card.locator("span:has-text('Nonstop')"))
+            stops = stops_el.first.inner_text().strip() if stops_el.count() > 0 else ""
+
+        if not departure:
+            return None
+
+        return {"departure": departure, "arrival": arrival, "airline": airline, "duration": duration, "stops": stops}
+    except Exception:
+        return None
 
 
 def _parse_flight_card(card, destination: str, departure_date: str, return_date: str | None, link: str) -> Flight | None:
