@@ -4,10 +4,14 @@ import random
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
 
 from config import Flight
+
+if TYPE_CHECKING:
+    from api.schemas import SearchJob
 
 log = logging.getLogger(__name__)
 
@@ -515,3 +519,33 @@ def _parse_flight_card(card, destination: str, departure_date: str, return_date:
         )
     except Exception:
         return None
+
+
+def search_flights_for_job(job: "SearchJob", headless: bool = True) -> list[Flight]:
+    """Run one isolated search for a SearchJob. Owns its own browser/page.
+
+    Used by search_service's streaming path (one thread per job). The cron
+    entry point continues to use search_flights() which shares a single page
+    across many (origin, dest, date) tuples for efficiency.
+    """
+    SCREENSHOT_DIR.mkdir(exist_ok=True)
+    stops_arg = str(job.stops) if isinstance(job.stops, int) else job.stops
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        try:
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 900},
+                locale="en-US",
+            )
+            page = context.new_page()
+            flights = _search_single(
+                page,
+                job.origin,
+                job.destination,
+                job.outbound_date.isoformat(),
+                job.return_date.isoformat() if job.return_date else None,
+                stops_arg,
+            )
+        finally:
+            browser.close()
+    return flights
