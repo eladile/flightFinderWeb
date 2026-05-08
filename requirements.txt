@@ -1,3 +1,6 @@
 playwright
 python-dotenv
 pydantic>=2
+airportsdata
+pytest>=7
+honcho>=1.1
