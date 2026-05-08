@@ -15,12 +15,7 @@ Example:
 from datetime import date
 from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-
-def to_camel(field_name: str) -> str:
-    """Convert snake_case to camelCase."""
-    components = field_name.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
+from pydantic.alias_generators import to_camel
 
 
 class BaseSchema(BaseModel):
