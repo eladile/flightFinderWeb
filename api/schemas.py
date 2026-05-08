@@ -35,7 +35,7 @@ class BaseSchema(BaseModel):
 class Flight(BaseSchema):
     """
     Flight result matching the config.Flight dataclass.
-    All 16 fields with identical names, types, and defaults.
+    All 18 fields with identical names, types, and defaults.
     """
 
     destination: str
@@ -69,8 +69,8 @@ class SearchRequest(BaseSchema):
     trip_type: Literal["oneway", "roundtrip"]
     outbound_date_from: date
     outbound_date_to: date
-    return_date_from: date | None
-    return_date_to: date | None
+    return_date_from: date | None = None
+    return_date_to: date | None = None
     stops: Literal["any", "nonstop"] | int
     providers: list[str] = Field(default_factory=lambda: ["google", "skyscanner"])
 
@@ -128,7 +128,7 @@ class SearchJob(BaseSchema):
     origin: str
     destination: str
     outbound_date: date
-    return_date: date | None
+    return_date: date | None = None
     stops: Literal["any", "nonstop"] | int
     providers: list[str]
 
