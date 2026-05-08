@@ -1,7 +1,11 @@
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from api.schemas import SearchRequest
 
 EUROPE_AIRPORTS = [
     "AMS", "ATH", "BCN", "BER", "BRU", "BUD", "CDG", "CPH",
@@ -49,12 +53,22 @@ class Config:
     headless: bool = True
 
 
-def load_config() -> Config:
+def _load_dotenv_once() -> None:
     try:
         from dotenv import load_dotenv
         load_dotenv()
     except ImportError:
         pass
+
+
+def _fatal(message: str) -> None:
+    print(f"Error: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def load_config() -> Config:
+    """Parse all flight + SMTP settings from env vars. Used by the cron entry point."""
+    _load_dotenv_once()
 
     required = {
         "SMTP_EMAIL": os.getenv("SMTP_EMAIL", ""),
@@ -65,35 +79,28 @@ def load_config() -> Config:
     }
     missing = [k for k, v in required.items() if not v]
     if missing:
-        print(f"Error: missing required env vars: {', '.join(missing)}", file=sys.stderr)
-        sys.exit(1)
+        _fatal(f"missing required env vars: {', '.join(missing)}")
 
     trip_type = os.getenv("TRIP_TYPE", "oneway").lower()
     if trip_type not in ("oneway", "roundtrip"):
-        print(f"Error: TRIP_TYPE must be 'oneway' or 'roundtrip', got '{trip_type}'", file=sys.stderr)
-        sys.exit(1)
+        _fatal(f"TRIP_TYPE must be 'oneway' or 'roundtrip', got '{trip_type}'")
 
     stops = os.getenv("STOPS", "any").lower()
     if stops not in ("any", "nonstop") and not stops.isdigit():
-        print(f"Error: STOPS must be 'any', 'nonstop', or a number (e.g. '1'), got '{stops}'", file=sys.stderr)
-        sys.exit(1)
+        _fatal(f"STOPS must be 'any', 'nonstop', or a number (e.g. '1'), got '{stops}'")
 
     return_from = os.getenv("RETURN_FROM", "")
     return_to = os.getenv("RETURN_TO", "")
     if trip_type == "roundtrip" and (not return_from or not return_to):
-        print("Error: RETURN_FROM and RETURN_TO required when TRIP_TYPE=roundtrip", file=sys.stderr)
-        sys.exit(1)
+        _fatal("RETURN_FROM and RETURN_TO required when TRIP_TYPE=roundtrip")
 
-    # Validate dates
     for name, val in [("OUTBOUND_FROM", required["OUTBOUND_FROM"]),
                       ("OUTBOUND_TO", required["OUTBOUND_TO"])]:
         try:
             datetime.strptime(val, "%Y-%m-%d")
         except ValueError:
-            print(f"Error: {name} must be YYYY-MM-DD format, got '{val}'", file=sys.stderr)
-            sys.exit(1)
+            _fatal(f"{name} must be YYYY-MM-DD format, got '{val}'")
 
-    # Parse destinations
     dest = os.getenv("DESTINATION", "europe")
     if dest.lower() == "europe":
         destinations = EUROPE_AIRPORTS
@@ -101,16 +108,14 @@ def load_config() -> Config:
         destinations = [code.strip().upper() for code in dest.split(",")]
         for code in destinations:
             if len(code) != 3:
-                print(f"Error: invalid airport code '{code}' in DESTINATION", file=sys.stderr)
-                sys.exit(1)
+                _fatal(f"invalid airport code '{code}' in DESTINATION")
 
     providers_raw = os.getenv("PROVIDERS", "google,skyscanner")
     providers = [p.strip().lower() for p in providers_raw.split(",")]
     valid_providers = {"google", "skyscanner"}
     for p in providers:
         if p not in valid_providers:
-            print(f"Error: unknown provider '{p}', must be one of: {', '.join(sorted(valid_providers))}", file=sys.stderr)
-            sys.exit(1)
+            _fatal(f"unknown provider '{p}', must be one of: {', '.join(sorted(valid_providers))}")
 
     return Config(
         smtp_email=required["SMTP_EMAIL"],
@@ -127,3 +132,25 @@ def load_config() -> Config:
         providers=providers,
         headless=os.getenv("HEADLESS", "true").lower() == "true",
     )
+
+
+def load_search_request_from_env() -> "SearchRequest":
+    """Build a SearchRequest from env vars. Used by the cron entry point in Step 1.5+."""
+    from api.schemas import SearchRequest
+
+    cfg = load_config()
+    stops: object = int(cfg.stops) if cfg.stops.isdigit() else cfg.stops
+
+    kwargs: dict = dict(
+        origins=[cfg.origin],
+        destinations=cfg.destinations,
+        trip_type=cfg.trip_type,
+        outbound_date_from=date.fromisoformat(cfg.outbound_from),
+        outbound_date_to=date.fromisoformat(cfg.outbound_to),
+        stops=stops,
+        providers=cfg.providers,
+    )
+    if cfg.trip_type == "roundtrip":
+        kwargs["return_date_from"] = date.fromisoformat(cfg.return_from)
+        kwargs["return_date_to"] = date.fromisoformat(cfg.return_to)
+    return SearchRequest(**kwargs)
