@@ -94,21 +94,38 @@ def _date_range(start: date, end: date) -> list[date]:
 
 
 def run(req: SearchRequest, headless: bool = True) -> list[FlightDC]:
-    """Execute a SearchRequest sequentially and return all flights.
+    """Execute a SearchRequest as a batch and return all flights.
 
-    Used by the cron path. Calls the same per-job function as streaming, but
-    no concurrency — reliability over speed for unattended batch runs.
+    Used by the cron path. Delegates to each provider's batch search_flights()
+    so the cron keeps its "one browser, many searches" efficiency. The batch
+    APIs accept a single origin (which matches today's cron); if a caller
+    passes multiple origins, we loop over them.
     """
-    from scraper import search_flights_for_job
+    import scraper
+    import skyscanner
 
-    jobs = expand(req)
-    flights: list[FlightDC] = []
-    for job in jobs:
-        try:
-            flights.extend(search_flights_for_job(job, headless=headless))
-        except Exception as e:
-            log.warning(f"Job {job.id} ({job.origin}->{job.destination}) failed: {e}")
-    return flights
+    stops_arg = str(req.stops) if isinstance(req.stops, int) else req.stops
+    return_from = req.return_date_from.isoformat() if req.return_date_from else ""
+    return_to = req.return_date_to.isoformat() if req.return_date_to else ""
+
+    all_flights: list[FlightDC] = []
+    for origin in req.origins:
+        kwargs = dict(
+            origin=origin,
+            destinations=list(req.destinations),
+            date_from=req.outbound_date_from.isoformat(),
+            date_to=req.outbound_date_to.isoformat(),
+            return_from=return_from,
+            return_to=return_to,
+            stops=stops_arg,
+            headless=headless,
+        )
+        for provider in req.providers:
+            if provider == "google":
+                all_flights.extend(scraper.search_flights(**kwargs))
+            elif provider == "skyscanner":
+                all_flights.extend(skyscanner.search_flights(**kwargs))
+    return all_flights
 
 
 def run_streaming(
