@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Flight } from '../api/useSearchStream';
+import { showToast } from '../lib/toast';
 
 type Props = {
   open: boolean;
@@ -74,8 +75,11 @@ export default function SendDialog({ open, selectedFlights, defaultRecipient, on
 
       onSent();
       onClose();
+      showToast('Email sent', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setError(msg);
+      showToast(`Send failed: ${msg}`, 'error');
     } finally {
       setSending(false);
     }

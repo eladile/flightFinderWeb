@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProgressPanel from '../ProgressPanel';
 import type { StreamState } from '../../api/useSearchStream';
@@ -87,5 +88,19 @@ describe('ProgressPanel', () => {
     const state = buildState({ phase: 'done', totalFlights: 7, failedJobs: 1 });
     render(<ProgressPanel state={state} />);
     expect(screen.getByRole('heading', { name: /done: 7 flights · 1 failed/i })).toBeInTheDocument();
+  });
+
+  it('calls onRetry with the failed job id when retry is clicked', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const state = buildState({
+      jobs: {
+        j1: { job: buildState().jobs.j1.job, status: 'failed', error: 'timed out' },
+        j2: { job: buildState().jobs.j2.job, status: 'completed', flightCount: 3 },
+      },
+    });
+    render(<ProgressPanel state={state} onRetry={onRetry} />);
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(onRetry).toHaveBeenCalledWith('j1');
   });
 });

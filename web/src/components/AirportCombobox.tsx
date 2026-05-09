@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Command } from 'cmdk';
 import { fetchAirports } from '../api/client';
+import { showToast } from '../lib/toast';
 import type { Airport } from '../types';
 
 // Regional-indicator trick: ISO-2 "DE" → 🇩🇪. Base codepoint is 0x1F1E6 ('A').
@@ -43,7 +44,10 @@ export default function AirportCombobox({ value, onChange, placeholder }: Props)
         if (!cancelled) setResults(data);
       })
       .catch(() => {
-        if (!cancelled) setResults([]);
+        if (!cancelled) {
+          setResults([]);
+          showToast('Airport search failed', 'error');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

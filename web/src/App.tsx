@@ -6,8 +6,10 @@ import CuratedView from './components/CuratedView';
 import FlightsTable from './components/FlightsTable';
 import SelectionBar from './components/SelectionBar';
 import SendDialog from './components/SendDialog';
+import ToastContainer from './components/ToastContainer';
 import { useSearchStream } from './api/useSearchStream';
 import { useSelection } from './hooks/useSelection';
+import { showToast } from './lib/toast';
 import type { SearchRequest } from './types';
 
 const queryClient = new QueryClient();
@@ -35,6 +37,30 @@ export default function App() {
     stream.start(req);
   }
 
+  function handleCancel() {
+    stream.cancel();
+    showToast('Search cancelled', 'info');
+  }
+
+  function handleRetry(jobId: string) {
+    const failed = stream.state.jobs[jobId];
+    if (!failed) return;
+    const { job } = failed;
+    const retryReq: SearchRequest = {
+      origins: [job.origin],
+      destinations: [job.destination],
+      tripType: job.returnDate ? 'roundtrip' : 'oneway',
+      outboundDateFrom: job.outboundDate,
+      outboundDateTo: job.outboundDate,
+      stops: job.stops,
+      providers: job.providers as SearchRequest['providers'],
+      ...(job.returnDate
+        ? { returnDateFrom: job.returnDate, returnDateTo: job.returnDate }
+        : {}),
+    };
+    stream.start(retryReq);
+  }
+
   const selectedFlights = stream.state.flights.filter((f) =>
     selection.selected.has(
       `${f.source}:${f.destination}:${f.date}:${f.airline}:${f.departureTime}:${f.price}`
@@ -59,7 +85,11 @@ export default function App() {
         <SearchForm onSubmit={handleSubmit} loading={stream.state.phase === 'running' || stream.state.phase === 'opening' || stream.state.phase === 'planning'} />
         {stream.state.phase !== 'idle' && (
           <div className="mt-8">
-            <ProgressPanel state={stream.state} onCancel={stream.cancel} />
+            <ProgressPanel
+              state={stream.state}
+              onCancel={handleCancel}
+              onRetry={handleRetry}
+            />
           </div>
         )}
         {stream.state.flights.length > 0 && (
@@ -90,6 +120,7 @@ export default function App() {
           onClose={() => setSendDialogOpen(false)}
           onSent={handleSent}
         />
+        <ToastContainer />
       </main>
     </QueryClientProvider>
   );

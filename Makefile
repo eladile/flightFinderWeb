@@ -18,6 +18,7 @@ build:
 
 run:
 	cd web && npm run build
+	(sleep 1 && open http://localhost:7777) &
 	.venv/bin/uvicorn api.main:app --port 7777
 
 cron:
