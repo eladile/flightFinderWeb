@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type CSSProperties } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -46,7 +46,7 @@ function createColumns(hasSelection: boolean) {
     {
       id: 'dates',
       header: 'Dates',
-      cell: (info) => <span className="text-sm">{info.getValue()}</span>,
+      cell: (info) => <span className="whitespace-nowrap text-sm">{info.getValue()}</span>,
     }
   ),
   columnHelper.accessor('airline', {
@@ -188,7 +188,19 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full table-fixed whitespace-nowrap text-left text-sm">
+              <colgroup>
+                {selected && <col style={{ width: 40 }} />}
+                <col style={{ width: 90 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 170 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 50 }} />
+              </colgroup>
               <thead className="border-b border-gray-200 bg-gray-50">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
@@ -197,8 +209,14 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
                       const columnId = header.column.id;
                       const currentFilter = columnFilters.find((f) => f.id === columnId);
 
+                      const filterWrapStyle: CSSProperties =
+                        columnId === 'destination' || columnId === 'airline'
+                          ? { width: 160, maxWidth: 160 }
+                          : columnId === 'stops'
+                          ? { width: 130, maxWidth: 130 }
+                          : {};
                       return (
-                        <th key={header.id} className="px-4 py-3 font-semibold text-gray-700">
+                        <th key={header.id} className="px-4 py-3 align-top font-semibold text-gray-700" style={filterWrapStyle}>
                           <div className="flex flex-col gap-2">
                             <div
                               className={canSort ? 'cursor-pointer select-none hover:text-blue-600' : ''}
@@ -223,7 +241,8 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
                                   header.column.setFilterValue(opts.length ? opts : undefined);
                                 }}
                                 multiple
-                                className="w-full max-w-[200px] rounded border border-gray-300 px-2 py-1 text-xs"
+                                size={4}
+                                className="block w-full rounded border border-gray-300 px-2 py-1 text-xs"
                               >
                                 {uniqueDestinations.map((dest) => (
                                   <option key={dest} value={dest}>
@@ -241,11 +260,12 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
                                   header.column.setFilterValue(opts.length ? opts : undefined);
                                 }}
                                 multiple
-                                className="w-full max-w-[200px] rounded border border-gray-300 px-2 py-1 text-xs"
+                                size={4}
+                                className="block w-full rounded border border-gray-300 px-2 py-1 text-xs"
                               >
                                 {uniqueAirlines.map((airline) => (
-                                  <option key={airline} value={airline}>
-                                    {airline}
+                                  <option key={airline} value={airline} title={airline}>
+                                    {airline.length > 22 ? airline.slice(0, 20) + '…' : airline}
                                   </option>
                                 ))}
                               </select>

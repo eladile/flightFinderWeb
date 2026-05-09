@@ -77,7 +77,7 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto max-w-6xl p-6">
         <div className="mb-6 flex items-baseline justify-between">
           <h1 className="text-3xl font-bold">Lazy Hopper</h1>
           <p className="text-xs text-gray-500">backend: {health}</p>
