@@ -6,3 +6,8 @@ web/node_modules/
 web/dist/
 web/.vite/
 web/*.tsbuildinfo
+# Local working dirs: subagent handoff prompts + planning notes.
+# These may contain user-specific setup details; never commit.
+scratchpad/
+workspace/
+.idea/

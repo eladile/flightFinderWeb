@@ -1,13 +1,13 @@
 .PHONY: setup dev build run cron test clean
 
-# setup requires ARTIFACTORY_USERNAME and ARTIFACTORY_PASSWORD in your env
-# (Tenable Artifactory credentials, used to install python deps).
+# setup creates a venv and installs deps from public PyPI + public npm.
+# If your environment has a custom PyPI mirror or npm registry configured
+# at the user level, PIP_CONFIG_FILE=/dev/null and NPM_CONFIG_USERCONFIG=/dev/null
+# will bypass them so this command is reproducible across machines.
 setup:
-	@test -n "$$ARTIFACTORY_USERNAME" || (echo "ARTIFACTORY_USERNAME not set" && exit 1)
-	@test -n "$$ARTIFACTORY_PASSWORD" || (echo "ARTIFACTORY_PASSWORD not set" && exit 1)
 	test -d .venv || python3 -m venv .venv
-	PIP_CONFIG_FILE=/dev/null .venv/bin/pip install --index-url "https://$${ARTIFACTORY_USERNAME}:$${ARTIFACTORY_PASSWORD}@artifactory.eng.tenable.com/artifactory/api/pypi/tenable_pypigroup/simple" -r requirements.txt
-	cd web && npm install
+	PIP_CONFIG_FILE=/dev/null .venv/bin/pip install --index-url https://pypi.org/simple/ -r requirements.txt
+	cd web && NPM_CONFIG_USERCONFIG=/dev/null npm install
 	.venv/bin/python -m playwright install chromium
 
 dev:
