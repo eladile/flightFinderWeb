@@ -51,7 +51,14 @@ function createColumns(hasSelection: boolean) {
   ),
   columnHelper.accessor('airline', {
     header: 'Airline',
-    cell: (info) => info.getValue(),
+    cell: (info) => {
+      const value = info.getValue();
+      return (
+        <span className="block truncate" title={value}>
+          {value}
+        </span>
+      );
+    },
     filterFn: 'arrIncludesSome',
   }),
   columnHelper.accessor((row) => `${row.departureTime} → ${row.arrivalTime}`, {
@@ -188,7 +195,7 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed whitespace-nowrap text-left text-sm">
+            <table className="w-full table-fixed text-left text-sm">
               <colgroup>
                 {selected && <col style={{ width: 40 }} />}
                 <col style={{ width: 90 }} />
@@ -336,7 +343,7 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
                             );
                           }
                           return (
-                            <td key={cell.id} className="px-4 py-3">
+                            <td key={cell.id} className="overflow-hidden px-4 py-3 align-top">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
                           );
