@@ -136,3 +136,92 @@ def test_search_cancel():
     response = client.delete("/api/search/fake_id")
     assert response.status_code == 200
     assert response.json() == {"cancelled": False}
+
+
+def test_send_uses_custom_subject():
+    """POST /api/send with custom subject passes it to emailer."""
+    flight = Flight(
+        destination="BER",
+        airline="LH",
+        departure_time="10:00",
+        arrival_time="14:00",
+        duration="4hr 0min",
+        price="$200",
+        date="2026-06-01",
+    )
+
+    with patch("api.routes.send.emailer.send_flight_alert") as mock_send:
+        response = client.post(
+            "/api/send",
+            json={
+                "flights": [flight.model_dump(by_alias=True)],
+                "subject": "Custom Subject Line",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+
+        # Verify emailer was called with custom subject
+        assert mock_send.call_count == 1
+        call_kwargs = mock_send.call_args.kwargs
+        assert call_kwargs["subject"] == "Custom Subject Line"
+
+
+def test_send_uses_custom_recipient():
+    """POST /api/send with custom recipient passes it to emailer."""
+    flight = Flight(
+        destination="BER",
+        airline="LH",
+        departure_time="10:00",
+        arrival_time="14:00",
+        duration="4hr 0min",
+        price="$200",
+        date="2026-06-01",
+    )
+
+    with patch("api.routes.send.emailer.send_flight_alert") as mock_send:
+        response = client.post(
+            "/api/send",
+            json={
+                "flights": [flight.model_dump(by_alias=True)],
+                "to": "custom@example.com, another@example.com",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+
+        # Verify emailer was called with custom recipients
+        assert mock_send.call_count == 1
+        call_kwargs = mock_send.call_args.kwargs
+        assert call_kwargs["recipients"] == ["custom@example.com", "another@example.com"]
+
+
+def test_send_preview_returns_html():
+    """POST /api/send/preview returns HTML."""
+    flight = Flight(
+        destination="BER",
+        airline="LH",
+        departure_time="10:00",
+        arrival_time="14:00",
+        duration="4hr 0min",
+        price="$200",
+        date="2026-06-01",
+    )
+
+    with patch("api.routes.send.emailer.build_html", return_value="<p>mocked</p>"):
+        response = client.post(
+            "/api/send/preview",
+            json={"flights": [flight.model_dump(by_alias=True)]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "html" in data
+        assert data["html"] == "<p>mocked</p>"
+
+
+def test_config_email_to():
+    """GET /api/config/email_to returns the configured recipient."""
+    response = client.get("/api/config/email_to")
+    assert response.status_code == 200
+    data = response.json()
+    assert "emailTo" in data

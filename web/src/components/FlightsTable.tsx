@@ -10,18 +10,33 @@ import {
   type ColumnFiltersState,
 } from '@tanstack/react-table';
 import type { StreamState } from '../api/useSearchStream';
-import { parsePrice, parseDuration } from '../lib/flightUtils';
+import { parsePrice, parseDuration, flightKey } from '../lib/flightUtils';
 
 type Props = {
   state: StreamState;
+  selected?: Set<string>;
+  onToggle?: (key: string) => void;
 };
 
 type FlightWithJobId = StreamState['flights'][0];
 
 const columnHelper = createColumnHelper<FlightWithJobId>();
 
-const columns = [
-  columnHelper.accessor('destination', {
+function createColumns(hasSelection: boolean) {
+  const cols = [];
+
+  if (hasSelection) {
+    cols.push(
+      columnHelper.display({
+        id: 'select',
+        header: '',
+        cell: () => null,
+        enableSorting: false,
+      })
+    );
+  }
+
+  cols.push(columnHelper.accessor('destination', {
     header: 'Destination',
     cell: (info) => <span className="font-mono font-semibold">{info.getValue()}</span>,
     filterFn: 'arrIncludesSome',
@@ -112,15 +127,20 @@ const columns = [
       );
     },
     enableSorting: false,
-  }),
-];
+  }));
 
-export default function FlightsTable({ state }: Props) {
+  return cols;
+}
+
+export default function FlightsTable({ state, selected, onToggle }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'price', desc: false }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const hasSelection = Boolean(selected && onToggle);
+  const columns = useMemo(() => createColumns(hasSelection), [hasSelection]);
 
   const table = useReactTable({
     data: state.flights,
@@ -276,11 +296,31 @@ export default function FlightsTable({ state }: Props) {
                           }
                         }}
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id} className="px-4 py-3">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
+                        {row.getVisibleCells().map((cell) => {
+                          if (cell.column.id === 'select' && hasSelection) {
+                            const key = flightKey(flight);
+                            const isChecked = selected?.has(key) ?? false;
+                            return (
+                              <td key={cell.id} className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    onToggle?.(key);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-4 w-4"
+                                />
+                              </td>
+                            );
+                          }
+                          return (
+                            <td key={cell.id} className="px-4 py-3">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          );
+                        })}
                       </tr>
                       {hasReturn && isExpanded && (
                         <tr key={`${row.id}-return`} className="border-b border-gray-100 bg-blue-50">

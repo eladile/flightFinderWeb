@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import airports, search, send
+from api.routes import airports, config, search, send
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ def health() -> dict:
 
 # Include route modules
 app.include_router(airports.router)
+app.include_router(config.router)
 app.include_router(search.router)
 app.include_router(send.router)
 

@@ -57,8 +57,11 @@ def send_email(req: SendRequest) -> dict:
         for f in req.flights
     ]
 
-    # Determine email recipient
-    email_to = req.to or cfg.email_to
+    # Determine email recipient(s)
+    recipients = None
+    if req.to:
+        # Support comma-separated string from UI
+        recipients = [e.strip() for e in req.to.split(",") if e.strip()]
 
     # Determine if roundtrip based on flights
     roundtrip = any(f.return_date for f in dc_flights)
@@ -73,12 +76,61 @@ def send_email(req: SendRequest) -> dict:
             flights=dc_flights,
             smtp_email=cfg.smtp_email,
             smtp_password=cfg.smtp_password,
-            email_to=email_to,
+            email_to=cfg.email_to,
             origin=origin,
             roundtrip=roundtrip,
+            subject=req.subject,
+            recipients=recipients,
         )
     except Exception as e:
         log.exception("Failed to send email")
         return {"ok": False, "error": str(e)}
 
     return {"ok": True, "count": len(req.flights)}
+
+
+@router.post("/preview")
+def preview_email(req: SendRequest) -> dict:
+    """Preview HTML for selected flights without sending."""
+    if not req.flights:
+        raise HTTPException(status_code=400, detail="No flights provided")
+
+    # Load config to get origin
+    try:
+        cfg = load_config()
+    except SystemExit:
+        raise HTTPException(status_code=500, detail="Configuration missing or invalid")
+
+    # Convert Pydantic Flight schemas to config.Flight dataclasses
+    dc_flights = [
+        FlightDC(
+            destination=f.destination,
+            airline=f.airline,
+            departure_time=f.departure_time,
+            arrival_time=f.arrival_time,
+            duration=f.duration,
+            price=f.price,
+            date=f.date,
+            stops=f.stops,
+            return_departure=f.return_departure,
+            return_arrival=f.return_arrival,
+            link=f.link,
+            source=f.source,
+            layover_info=f.layover_info,
+            return_date=f.return_date,
+            price_type=f.price_type,
+            return_airline=f.return_airline,
+            return_duration=f.return_duration,
+            return_stops=f.return_stops,
+        )
+        for f in req.flights
+    ]
+
+    # Determine if roundtrip based on flights
+    roundtrip = any(f.return_date for f in dc_flights)
+    origin = cfg.origin
+
+    sorted_flights, cheapest, shortest = emailer._sort_and_tag(dc_flights)
+    html = emailer.build_html(sorted_flights, cheapest, shortest, origin, roundtrip)
+
+    return {"html": html}

@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import type { StreamState } from '../api/useSearchStream';
-import { parsePrice, parseDuration } from '../lib/flightUtils';
+import { parsePrice, parseDuration, flightKey } from '../lib/flightUtils';
 
 type Props = {
   state: StreamState;
+  selected?: Set<string>;
+  onToggle?: (key: string) => void;
 };
 
 type FlightWithJobId = StreamState['flights'][0];
@@ -64,9 +66,33 @@ function groupByDestination(flights: FlightWithJobId[]): DestinationGroup[] {
   });
 }
 
-function FlightCard({ flight, badge }: { flight: FlightWithJobId; badge: string }) {
+function FlightCard({
+  flight,
+  badge,
+  selected,
+  onToggle,
+}: {
+  flight: FlightWithJobId;
+  badge: string;
+  selected?: Set<string>;
+  onToggle?: (key: string) => void;
+}) {
+  const hasSelection = Boolean(selected && onToggle);
+  const key = flightKey(flight);
+  const isChecked = selected?.has(key) ?? false;
+
   return (
     <div className="rounded border border-gray-200 bg-gray-50 p-3">
+      {hasSelection && (
+        <div className="mb-2 flex items-center">
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={() => onToggle?.(key)}
+            className="h-4 w-4"
+          />
+        </div>
+      )}
       <div className="mb-1 text-xs font-semibold uppercase text-blue-600">{badge}</div>
       <div className="flex items-baseline gap-2">
         <span className="text-2xl font-bold">{flight.price}</span>
@@ -84,7 +110,7 @@ function FlightCard({ flight, badge }: { flight: FlightWithJobId; badge: string 
   );
 }
 
-export default function CuratedView({ state }: Props) {
+export default function CuratedView({ state, selected, onToggle }: Props) {
   const groups = useMemo(() => groupByDestination(state.flights), [state.flights]);
 
   if (groups.length === 0) return null;
@@ -118,11 +144,30 @@ export default function CuratedView({ state }: Props) {
 
               <div className="space-y-3">
                 {isSameFlight && cheapest ? (
-                  <FlightCard flight={cheapest} badge="Cheapest & Fastest" />
+                  <FlightCard
+                    flight={cheapest}
+                    badge="Cheapest & Fastest"
+                    selected={selected}
+                    onToggle={onToggle}
+                  />
                 ) : (
                   <>
-                    {cheapest && <FlightCard flight={cheapest} badge="Cheapest" />}
-                    {fastest && <FlightCard flight={fastest} badge="Fastest" />}
+                    {cheapest && (
+                      <FlightCard
+                        flight={cheapest}
+                        badge="Cheapest"
+                        selected={selected}
+                        onToggle={onToggle}
+                      />
+                    )}
+                    {fastest && (
+                      <FlightCard
+                        flight={fastest}
+                        badge="Fastest"
+                        selected={selected}
+                        onToggle={onToggle}
+                      />
+                    )}
                   </>
                 )}
               </div>
