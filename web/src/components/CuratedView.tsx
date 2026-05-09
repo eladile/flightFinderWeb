@@ -111,7 +111,19 @@ function FlightCard({
 }
 
 export default function CuratedView({ state, selected, onToggle }: Props) {
-  const groups = useMemo(() => groupByDestination(state.flights), [state.flights]);
+  // Collapse near-duplicate rows from Google Flights by booking link — same
+  // link = same booking, no reason to show it twice.
+  const dedupedFlights = useMemo(() => {
+    const seen = new Set<string>();
+    return state.flights.filter((f) => {
+      if (!f.link) return true;
+      if (seen.has(f.link)) return false;
+      seen.add(f.link);
+      return true;
+    });
+  }, [state.flights]);
+
+  const groups = useMemo(() => groupByDestination(dedupedFlights), [dedupedFlights]);
 
   if (groups.length === 0) return null;
 

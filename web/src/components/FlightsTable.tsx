@@ -149,8 +149,21 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
   const hasSelection = Boolean(selected && onToggle);
   const columns = useMemo(() => createColumns(hasSelection), [hasSelection]);
 
+  // Google Flights returns near-duplicate rows; collapse by booking link so
+  // the user sees one checkbox per distinct booking. Flights without a link
+  // (e.g., skyscanner deep-link entries) always pass through.
+  const dedupedFlights = useMemo(() => {
+    const seen = new Set<string>();
+    return state.flights.filter((f) => {
+      if (!f.link) return true;
+      if (seen.has(f.link)) return false;
+      seen.add(f.link);
+      return true;
+    });
+  }, [state.flights]);
+
   const table = useReactTable({
-    data: state.flights,
+    data: dedupedFlights,
     columns,
     state: { sorting, columnFilters, globalFilter },
     onSortingChange: setSorting,
@@ -162,15 +175,15 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
   });
 
   const uniqueDestinations = useMemo(
-    () => Array.from(new Set(state.flights.map((f) => f.destination))).sort(),
-    [state.flights]
+    () => Array.from(new Set(dedupedFlights.map((f) => f.destination))).sort(),
+    [dedupedFlights]
   );
   const uniqueAirlines = useMemo(
-    () => Array.from(new Set(state.flights.map((f) => f.airline))).sort(),
-    [state.flights]
+    () => Array.from(new Set(dedupedFlights.map((f) => f.airline))).sort(),
+    [dedupedFlights]
   );
 
-  if (state.flights.length === 0) return null;
+  if (dedupedFlights.length === 0) return null;
 
   return (
     <section className="mt-8">
@@ -179,7 +192,7 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
         onClick={() => setExpanded(!expanded)}
         className="mb-4 rounded border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
       >
-        {expanded ? '▼ Hide all flights' : `▶ Show all ${state.flights.length} flights`}
+        {expanded ? '▼ Hide all flights' : `▶ Show all ${dedupedFlights.length} flights`}
       </button>
 
       {expanded && (
