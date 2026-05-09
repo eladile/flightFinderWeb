@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SearchForm from './components/SearchForm';
 import ProgressPanel from './components/ProgressPanel';
+import CuratedView from './components/CuratedView';
+import FlightsTable from './components/FlightsTable';
 import { useSearchStream } from './api/useSearchStream';
 import type { SearchRequest } from './types';
 
@@ -35,6 +37,8 @@ export default function App() {
             <ProgressPanel state={stream.state} onCancel={stream.cancel} />
           </div>
         )}
+        {stream.state.flights.length > 0 && <CuratedView state={stream.state} />}
+        {stream.state.flights.length > 0 && <FlightsTable state={stream.state} />}
       </main>
     </QueryClientProvider>
   );
