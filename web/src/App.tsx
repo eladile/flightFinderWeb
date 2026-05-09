@@ -10,6 +10,7 @@ import ToastContainer from './components/ToastContainer';
 import { useSearchStream } from './api/useSearchStream';
 import { useSelection } from './hooks/useSelection';
 import { showToast } from './lib/toast';
+import { flightKey } from './lib/flightUtils';
 import type { SearchRequest } from './types';
 
 const queryClient = new QueryClient();
@@ -62,9 +63,7 @@ export default function App() {
   }
 
   const selectedFlights = stream.state.flights.filter((f) =>
-    selection.selected.has(
-      `${f.source}:${f.destination}:${f.date}:${f.airline}:${f.departureTime}:${f.price}`
-    )
+    selection.selected.has(flightKey(f))
   );
 
   const handleSendClick = () => {

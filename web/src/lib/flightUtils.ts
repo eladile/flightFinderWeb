@@ -26,7 +26,33 @@ export function flightKey(flight: {
   date: string;
   airline: string;
   departureTime: string;
+  arrivalTime: string;
+  duration: string;
+  stops: string;
   price: string;
+  returnDate?: string;
+  returnDeparture?: string;
+  returnArrival?: string;
+  link?: string;
+  jobId?: string;
 }): string {
-  return `${flight.source}:${flight.destination}:${flight.date}:${flight.airline}:${flight.departureTime}:${flight.price}`;
+  // Google Flights returns near-duplicate rows; include all visible fields
+  // plus the link (unique per result) and jobId so we never collapse two
+  // distinct rows onto one selection.
+  return [
+    flight.source,
+    flight.destination,
+    flight.date,
+    flight.airline,
+    flight.departureTime,
+    flight.arrivalTime,
+    flight.duration,
+    flight.stops,
+    flight.price,
+    flight.returnDate ?? '',
+    flight.returnDeparture ?? '',
+    flight.returnArrival ?? '',
+    flight.link ?? '',
+    flight.jobId ?? '',
+  ].join('|');
 }

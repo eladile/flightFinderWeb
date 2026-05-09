@@ -61,7 +61,12 @@ describe('flightKey', () => {
     date: '2026-06-15',
     airline: 'Lufthansa',
     departureTime: '10:30',
+    arrivalTime: '13:45',
+    duration: '3h 15m',
+    stops: 'Nonstop',
     price: '$450',
+    link: 'https://example.com/x',
+    jobId: 'j1',
   };
 
   it('generates stable key for identical input', () => {
@@ -74,6 +79,18 @@ describe('flightKey', () => {
     const key1 = flightKey(flight);
     const key2 = flightKey({ ...flight, price: '$500' });
     expect(key1).not.toBe(key2);
+  });
+
+  it('distinguishes rows that differ only in arrival time (anti-collision)', () => {
+    const a = flightKey(flight);
+    const b = flightKey({ ...flight, arrivalTime: '14:00' });
+    expect(a).not.toBe(b);
+  });
+
+  it('distinguishes rows that differ only in link', () => {
+    const a = flightKey(flight);
+    const b = flightKey({ ...flight, link: 'https://example.com/y' });
+    expect(a).not.toBe(b);
   });
 
   it('includes all fields in the key', () => {
