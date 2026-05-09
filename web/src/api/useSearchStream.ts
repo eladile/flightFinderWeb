@@ -154,8 +154,7 @@ function reducer(state: StreamState, action: Action): StreamState {
 
 function encodeRequest(request: unknown): string {
   const json = JSON.stringify(request);
-  if (typeof btoa === 'function') return btoa(unescape(encodeURIComponent(json)));
-  return Buffer.from(json, 'utf-8').toString('base64');
+  return btoa(unescape(encodeURIComponent(json)));
 }
 
 export function useSearchStream() {

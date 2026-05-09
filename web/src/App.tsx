@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SearchForm from './components/SearchForm';
+import ProgressPanel from './components/ProgressPanel';
+import { useSearchStream } from './api/useSearchStream';
 import type { SearchRequest } from './types';
 
 const queryClient = new QueryClient();
 
 export default function App() {
   const [health, setHealth] = useState<string>('loading...');
+  const stream = useSearchStream();
 
   useEffect(() => {
     fetch('/api/health')
@@ -16,8 +19,7 @@ export default function App() {
   }, []);
 
   function handleSubmit(req: SearchRequest) {
-    // TODO Step 6: open SSE stream
-    console.log('search request', req);
+    stream.start(req);
   }
 
   return (
@@ -27,7 +29,12 @@ export default function App() {
           <h1 className="text-3xl font-bold">Lazy Hopper</h1>
           <p className="text-xs text-gray-500">backend: {health}</p>
         </div>
-        <SearchForm onSubmit={handleSubmit} />
+        <SearchForm onSubmit={handleSubmit} loading={stream.state.phase === 'running' || stream.state.phase === 'opening' || stream.state.phase === 'planning'} />
+        {stream.state.phase !== 'idle' && (
+          <div className="mt-8">
+            <ProgressPanel state={stream.state} onCancel={stream.cancel} />
+          </div>
+        )}
       </main>
     </QueryClientProvider>
   );
