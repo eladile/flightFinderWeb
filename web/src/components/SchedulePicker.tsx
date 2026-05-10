@@ -320,7 +320,9 @@ export default function SchedulePicker({ value, onChange }: Props) {
         </div>
       )}
 
-      <p className="text-sm italic text-gray-500">Runs {preview.toLowerCase()}</p>
+      <p className="text-sm italic text-gray-500">
+        Runs {preview.charAt(0).toLowerCase() + preview.slice(1)}
+      </p>
     </div>
   );
 }
