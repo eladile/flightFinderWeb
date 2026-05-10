@@ -1,18 +1,33 @@
 """FastAPI application entry point for the Lazy Hopper UI."""
 
 import logging
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import airports, config, search, send
+import scheduler_service
+from api.routes import airports, config, schedules, search, send
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="Lazy Hopper API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: start/stop scheduler."""
+    # Startup
+    if os.getenv("LAZY_HOPPER_DISABLE_SCHEDULER") != "1":
+        scheduler_service.start()
+    yield
+    # Shutdown
+    scheduler_service.shutdown()
+
+
+app = FastAPI(title="Lazy Hopper API", version="1.0.0", lifespan=lifespan)
 
 # CORS for dev (React runs on :7777)
 app.add_middleware(
@@ -32,6 +47,7 @@ def health() -> dict:
 # Include route modules
 app.include_router(airports.router)
 app.include_router(config.router)
+app.include_router(schedules.router)
 app.include_router(search.router)
 app.include_router(send.router)
 

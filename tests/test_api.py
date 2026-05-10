@@ -225,3 +225,118 @@ def test_config_email_to():
     assert response.status_code == 200
     data = response.json()
     assert "emailTo" in data
+
+
+def test_list_schedules_empty(tmp_schedules_path):
+    """GET /api/schedules returns empty list when no schedules."""
+    response = client.get("/api/schedules")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_create_schedule_returns_201_and_schedule(tmp_schedules_path):
+    """POST /api/schedules creates a schedule and returns 201."""
+    payload = {
+        "name": "test-schedule",
+        "cronExpression": "0 9 * * 1",
+        "request": {
+            "origins": ["TLV"],
+            "destinations": ["BER"],
+            "tripType": "oneway",
+            "outboundDateFrom": "2026-06-01",
+            "outboundDateTo": "2026-06-07",
+            "stops": "any",
+        },
+    }
+    with patch("api.routes.schedules.scheduler_service.refresh_job"):
+        response = client.post("/api/schedules", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "test-schedule"
+    assert data["cronExpression"] == "0 9 * * 1"
+    assert data["enabled"] is True
+
+
+def test_create_schedule_409_on_duplicate(tmp_schedules_path):
+    """POST /api/schedules with duplicate name returns 409."""
+    payload = {
+        "name": "duplicate",
+        "cronExpression": "0 9 * * 1",
+        "request": {
+            "origins": ["TLV"],
+            "destinations": ["BER"],
+            "tripType": "oneway",
+            "outboundDateFrom": "2026-06-01",
+            "outboundDateTo": "2026-06-07",
+            "stops": "any",
+        },
+    }
+    with patch("api.routes.schedules.scheduler_service.refresh_job"):
+        client.post("/api/schedules", json=payload)
+        response = client.post("/api/schedules", json=payload)
+    assert response.status_code == 409
+
+
+def test_update_schedule_404_missing(tmp_schedules_path):
+    """PUT /api/schedules/{name} returns 404 if not found."""
+    with patch("api.routes.schedules.scheduler_service.refresh_job"):
+        response = client.put("/api/schedules/missing", json={"enabled": False})
+    assert response.status_code == 404
+
+
+def test_delete_schedule_204(tmp_schedules_path):
+    """DELETE /api/schedules/{name} returns 204."""
+    payload = {
+        "name": "delete-me",
+        "cronExpression": "0 9 * * 1",
+        "request": {
+            "origins": ["TLV"],
+            "destinations": ["BER"],
+            "tripType": "oneway",
+            "outboundDateFrom": "2026-06-01",
+            "outboundDateTo": "2026-06-07",
+            "stops": "any",
+        },
+    }
+    with patch("api.routes.schedules.scheduler_service.refresh_job"):
+        client.post("/api/schedules", json=payload)
+    with patch("api.routes.schedules.scheduler_service.unschedule_job"):
+        response = client.delete("/api/schedules/delete-me")
+    assert response.status_code == 204
+
+
+def test_trigger_schedule_calls_scheduler_service(tmp_schedules_path):
+    """POST /api/schedules/{name}/trigger invokes scheduler_service."""
+    payload = {
+        "name": "trigger-me",
+        "cronExpression": "0 9 * * 1",
+        "request": {
+            "origins": ["TLV"],
+            "destinations": ["BER"],
+            "tripType": "oneway",
+            "outboundDateFrom": "2026-06-01",
+            "outboundDateTo": "2026-06-07",
+            "stops": "any",
+        },
+    }
+    with patch("api.routes.schedules.scheduler_service.refresh_job"):
+        client.post("/api/schedules", json=payload)
+
+    from datetime import datetime, timezone
+    from api.schemas import ScheduleRun
+
+    mock_run = ScheduleRun(
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+        status="success",
+        flight_count=3,
+    )
+
+    with patch("api.routes.schedules.scheduler_service.trigger_now", return_value=mock_run) as mock_trigger:
+        response = client.post("/api/schedules/trigger-me/trigger")
+
+    assert response.status_code == 200
+    assert mock_trigger.call_count == 1
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["flightCount"] == 3

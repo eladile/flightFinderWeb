@@ -12,7 +12,7 @@ Example:
     json_str = flight.model_dump_json(by_alias=True)  # produces camelCase keys
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
@@ -188,3 +188,125 @@ SSEEvent = Annotated[
     PlanEvent | JobStartedEvent | JobCompletedEvent | JobFailedEvent | FlightEvent | DoneEvent,
     Field(discriminator="type"),
 ]
+
+
+# --- Scheduled Searches Models ---
+
+class ScheduleRun(BaseSchema):
+    """A single execution record of a scheduled search."""
+
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: Literal["success", "failed", "running"]
+    flight_count: int = 0
+    error: str | None = None
+
+
+class Schedule(BaseSchema):
+    """A scheduled search definition."""
+
+    name: str
+    cron_expression: str
+    request: SearchRequest
+    recipients: list[str] = Field(default_factory=list)
+    subject: str | None = None
+    enabled: bool = True
+    created_at: datetime
+    last_run: ScheduleRun | None = None
+    runs: list[ScheduleRun] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Ensure name is a valid slug: lowercase alphanum + dashes, 1-64 chars."""
+        import re
+        if not re.match(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$", v):
+            raise ValueError(
+                "name must be lowercase alphanumeric with optional dashes, 1-64 chars"
+            )
+        return v
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron(cls, v: str) -> str:
+        """Ensure cron expression is valid."""
+        from croniter import croniter
+        if not croniter.is_valid(v):
+            raise ValueError(f"invalid cron expression: {v}")
+        return v
+
+
+class CreateScheduleRequest(BaseSchema):
+    """Request to create a new schedule."""
+
+    name: str
+    cron_expression: str
+    request: SearchRequest
+    recipients: list[str] = Field(default_factory=list)
+    subject: str | None = None
+    enabled: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Ensure name is a valid slug."""
+        import re
+        if not re.match(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$", v):
+            raise ValueError(
+                "name must be lowercase alphanumeric with optional dashes, 1-64 chars"
+            )
+        return v
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron(cls, v: str) -> str:
+        """Ensure cron expression is valid."""
+        from croniter import croniter
+        if not croniter.is_valid(v):
+            raise ValueError(f"invalid cron expression: {v}")
+        return v
+
+
+class UpdateScheduleRequest(BaseSchema):
+    """Request to update an existing schedule (all fields optional)."""
+
+    name: str | None = None
+    cron_expression: str | None = None
+    request: SearchRequest | None = None
+    recipients: list[str] | None = None
+    subject: str | None = None
+    enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        """Ensure name is a valid slug if provided."""
+        if v is None:
+            return v
+        import re
+        if not re.match(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$", v):
+            raise ValueError(
+                "name must be lowercase alphanumeric with optional dashes, 1-64 chars"
+            )
+        return v
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron(cls, v: str | None) -> str | None:
+        """Ensure cron expression is valid if provided."""
+        if v is None:
+            return v
+        from croniter import croniter
+        if not croniter.is_valid(v):
+            raise ValueError(f"invalid cron expression: {v}")
+        return v
+
+    @model_validator(mode="after")
+    def ensure_at_least_one_field(self) -> "UpdateScheduleRequest":
+        """Ensure at least one field is set."""
+        if all(
+            getattr(self, field) is None
+            for field in ["name", "cron_expression", "request", "recipients", "subject", "enabled"]
+        ):
+            raise ValueError("at least one field must be provided")
+        return self

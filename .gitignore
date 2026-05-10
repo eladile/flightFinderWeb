@@ -6,6 +6,8 @@ web/node_modules/
 web/dist/
 web/.vite/
 web/*.tsbuildinfo
+# User-defined scheduled searches — machine-local, may contain recipient emails.
+schedules.json
 # Local working dirs: subagent handoff prompts + planning notes.
 # These may contain user-specific setup details; never commit.
 scratchpad/

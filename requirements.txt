@@ -8,3 +8,5 @@ fastapi>=0.110
 uvicorn[standard]
 sse-starlette>=2.0
 httpx>=0.25
+apscheduler>=3.10
+croniter>=2
