@@ -16,20 +16,55 @@ type Props = {
   state: StreamState;
   selected?: Set<string>;
   onToggle?: (key: string) => void;
+  onSetAll?: (keys: string[]) => void;
+  onRemoveMany?: (keys: string[]) => void;
 };
 
 type FlightWithJobId = StreamState['flights'][0];
 
 const columnHelper = createColumnHelper<FlightWithJobId>();
 
-function createColumns(hasSelection: boolean) {
+function createColumns(hasSelection: boolean, hasMasterCheckbox: boolean) {
   const cols = [];
 
   if (hasSelection) {
     cols.push(
       columnHelper.display({
         id: 'select',
-        header: '',
+        header: hasMasterCheckbox
+          ? ({ table }) => {
+              const allKeys = table
+                .getFilteredRowModel()
+                .rows.map((r) => flightKey(r.original));
+              const meta = table.options.meta as
+                | { selected?: Set<string>; setAll?: (keys: string[]) => void; removeMany?: (keys: string[]) => void }
+                | undefined;
+              const selected = meta?.selected ?? new Set();
+              const selectedCount = allKeys.filter((k) => selected.has(k)).length;
+              const checked = selectedCount === allKeys.length && allKeys.length > 0;
+              const indeterminate = selectedCount > 0 && selectedCount < allKeys.length;
+
+              return (
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = indeterminate;
+                  }}
+                  checked={checked}
+                  onChange={() => {
+                    if (checked || indeterminate) {
+                      meta?.removeMany?.(allKeys);
+                    } else {
+                      const existingKeys = Array.from(selected);
+                      const newKeys = allKeys.filter((k) => !selected.has(k));
+                      meta?.setAll?.([...existingKeys, ...newKeys]);
+                    }
+                  }}
+                  className="h-4 w-4"
+                />
+              );
+            }
+          : '',
         cell: () => null,
         enableSorting: false,
       })
@@ -139,7 +174,7 @@ function createColumns(hasSelection: boolean) {
   return cols;
 }
 
-export default function FlightsTable({ state, selected, onToggle }: Props) {
+export default function FlightsTable({ state, selected, onToggle, onSetAll, onRemoveMany }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'price', desc: false }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -147,7 +182,8 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const hasSelection = Boolean(selected && onToggle);
-  const columns = useMemo(() => createColumns(hasSelection), [hasSelection]);
+  const hasMasterCheckbox = Boolean(selected && onToggle && onSetAll && onRemoveMany);
+  const columns = useMemo(() => createColumns(hasSelection, hasMasterCheckbox), [hasSelection, hasMasterCheckbox]);
 
   // Google Flights returns near-duplicate rows; collapse by booking link so
   // the user sees one checkbox per distinct booking. Flights without a link
@@ -172,6 +208,11 @@ export default function FlightsTable({ state, selected, onToggle }: Props) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    meta: {
+      selected,
+      setAll: onSetAll,
+      removeMany: onRemoveMany,
+    },
   });
 
   const uniqueDestinations = useMemo(

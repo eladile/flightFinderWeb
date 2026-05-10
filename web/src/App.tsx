@@ -7,6 +7,8 @@ import FlightsTable from './components/FlightsTable';
 import SelectionBar from './components/SelectionBar';
 import SendDialog from './components/SendDialog';
 import ToastContainer from './components/ToastContainer';
+import Tabs from './components/Tabs';
+import SchedulesPage from './pages/SchedulesPage';
 import { useSearchStream } from './api/useSearchStream';
 import { useSelection } from './hooks/useSelection';
 import { showToast } from './lib/toast';
@@ -17,6 +19,7 @@ const queryClient = new QueryClient();
 
 export default function App() {
   const [health, setHealth] = useState<string>('loading...');
+  const [activeTab, setActiveTab] = useState<'search' | 'schedules'>('search');
   const stream = useSearchStream();
   const selection = useSelection();
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
@@ -81,44 +84,65 @@ export default function App() {
           <h1 className="text-3xl font-bold">Lazy Hopper</h1>
           <p className="text-xs text-gray-500">backend: {health}</p>
         </div>
-        <SearchForm onSubmit={handleSubmit} loading={stream.state.phase === 'running' || stream.state.phase === 'opening' || stream.state.phase === 'planning'} />
-        {stream.state.phase !== 'idle' && (
-          <div className="mt-8">
-            <ProgressPanel
-              state={stream.state}
-              onCancel={handleCancel}
-              onRetry={handleRetry}
+
+        <div className="mb-6">
+          <Tabs
+            tabs={[
+              { key: 'search', label: 'Search' },
+              { key: 'schedules', label: 'Schedules' },
+            ]}
+            active={activeTab}
+            onChange={(key) => setActiveTab(key as 'search' | 'schedules')}
+          />
+        </div>
+
+        {activeTab === 'search' ? (
+          <>
+            <SearchForm onSubmit={handleSubmit} loading={stream.state.phase === 'running' || stream.state.phase === 'opening' || stream.state.phase === 'planning'} />
+            {stream.state.phase !== 'idle' && (
+              <div className="mt-8">
+                <ProgressPanel
+                  state={stream.state}
+                  onCancel={handleCancel}
+                  onRetry={handleRetry}
+                />
+              </div>
+            )}
+            {stream.state.flights.length > 0 && (
+              <CuratedView
+                state={stream.state}
+                selected={selection.selected}
+                onToggle={selection.toggle}
+              />
+            )}
+            {stream.state.flights.length > 0 && (
+              <FlightsTable
+                state={stream.state}
+                selected={selection.selected}
+                onToggle={selection.toggle}
+                onSetAll={selection.setAll}
+                onRemoveMany={selection.removeMany}
+              />
+            )}
+            {selection.count > 0 && (
+              <SelectionBar
+                selectedFlights={selectedFlights}
+                onSend={handleSendClick}
+                onClear={selection.clear}
+              />
+            )}
+            <SendDialog
+              open={sendDialogOpen}
+              selectedFlights={selectedFlights}
+              defaultRecipient={defaultRecipient}
+              onClose={() => setSendDialogOpen(false)}
+              onSent={handleSent}
             />
-          </div>
+          </>
+        ) : (
+          <SchedulesPage />
         )}
-        {stream.state.flights.length > 0 && (
-          <CuratedView
-            state={stream.state}
-            selected={selection.selected}
-            onToggle={selection.toggle}
-          />
-        )}
-        {stream.state.flights.length > 0 && (
-          <FlightsTable
-            state={stream.state}
-            selected={selection.selected}
-            onToggle={selection.toggle}
-          />
-        )}
-        {selection.count > 0 && (
-          <SelectionBar
-            selectedFlights={selectedFlights}
-            onSend={handleSendClick}
-            onClear={selection.clear}
-          />
-        )}
-        <SendDialog
-          open={sendDialogOpen}
-          selectedFlights={selectedFlights}
-          defaultRecipient={defaultRecipient}
-          onClose={() => setSendDialogOpen(false)}
-          onSent={handleSent}
-        />
+
         <ToastContainer />
       </main>
     </QueryClientProvider>

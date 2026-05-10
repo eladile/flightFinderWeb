@@ -7,8 +7,12 @@ import DateRangeInput from './DateRangeInput';
 import PresetPicker from './PresetPicker';
 
 type Props = {
-  onSubmit: (req: SearchRequest) => void;
+  onSubmit?: (req: SearchRequest) => void;
   loading?: boolean;
+  initial?: SearchRequest;
+  disableUrlState?: boolean;
+  onChange?: (req: SearchRequest | null) => void;
+  hideSubmit?: boolean;
 };
 
 function stopsToValue(s: Stops): string {
@@ -30,8 +34,16 @@ async function resolveCodes(codes: string[]): Promise<Airport[]> {
   return results.filter((a): a is Airport => a !== null);
 }
 
-export default function SearchForm({ onSubmit, loading }: Props) {
-  const { initial, push } = useUrlState();
+export default function SearchForm({
+  onSubmit,
+  loading,
+  initial: initialProp,
+  disableUrlState,
+  onChange,
+  hideSubmit,
+}: Props) {
+  const urlState = disableUrlState ? null : useUrlState();
+  const initial = initialProp ?? urlState?.initial ?? null;
 
   const [origins, setOrigins] = useState<Airport[]>([]);
   const [destinations, setDestinations] = useState<Airport[]>([]);
@@ -51,6 +63,27 @@ export default function SearchForm({ onSubmit, loading }: Props) {
     resolveCodes(initial.origins).then(setOrigins).catch(() => {});
     resolveCodes(initial.destinations).then(setDestinations).catch(() => {});
   }, [initial]);
+
+  useEffect(() => {
+    const msg = validate();
+    if (msg) {
+      onChange?.(null);
+      return;
+    }
+    const req: SearchRequest = {
+      origins: origins.map((a) => a.iata),
+      destinations: destinations.map((a) => a.iata),
+      tripType,
+      outboundDateFrom: outboundFrom,
+      outboundDateTo: outboundTo,
+      stops,
+      providers,
+      ...(tripType === 'roundtrip'
+        ? { returnDateFrom: returnFrom, returnDateTo: returnTo }
+        : {}),
+    };
+    onChange?.(req);
+  }, [origins, destinations, tripType, outboundFrom, outboundTo, returnFrom, returnTo, stops, providers, onChange]);
 
   function toggleProvider(p: Provider) {
     setProviders((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
@@ -89,8 +122,10 @@ export default function SearchForm({ onSubmit, loading }: Props) {
         ? { returnDateFrom: returnFrom, returnDateTo: returnTo }
         : {}),
     };
-    push(req);
-    onSubmit(req);
+    if (!disableUrlState) {
+      urlState?.push(req);
+    }
+    onSubmit?.(req);
   }
 
   return (
@@ -214,13 +249,15 @@ export default function SearchForm({ onSubmit, loading }: Props) {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-      >
-        {loading ? 'Searching…' : 'Search'}
-      </button>
+      {!hideSubmit && (
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+        >
+          {loading ? 'Searching…' : 'Search'}
+        </button>
+      )}
     </form>
   );
 }

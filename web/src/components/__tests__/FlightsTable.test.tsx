@@ -299,4 +299,226 @@ describe('FlightsTable', () => {
     // First data row should now be the shorter duration (1h 30m)
     expect(rows[1]).toHaveTextContent('1h 30m');
   });
+
+  it('does not render master checkbox when callbacks not provided', () => {
+    const state: StreamState = {
+      ...baseState,
+      flights: [
+        {
+          destination: 'BER',
+          airline: 'Lufthansa',
+          departureTime: '10:00',
+          arrivalTime: '12:00',
+          duration: '2h',
+          price: '$500',
+          date: '2026-06-15',
+          stops: 'nonstop',
+          returnDeparture: '',
+          returnArrival: '',
+          link: 'https://google.com/flights',
+          source: 'google',
+          layoverInfo: '',
+          returnDate: '',
+          priceType: '',
+          returnAirline: '',
+          returnDuration: '',
+          returnStops: '',
+          jobId: 'job1',
+        },
+      ],
+    };
+
+    const selected = new Set<string>();
+    const onToggle = () => {};
+    render(<FlightsTable state={state} selected={selected} onToggle={onToggle} />);
+
+    const toggleButton = screen.getByText('▶ Show all 1 flights');
+    fireEvent.click(toggleButton);
+
+    // Header should have only one checkbox (the row checkbox), not a master checkbox
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes.length).toBe(1); // Only the row checkbox
+  });
+
+  it('renders master checkbox when all callbacks provided', () => {
+    const state: StreamState = {
+      ...baseState,
+      flights: [
+        {
+          destination: 'BER',
+          airline: 'Lufthansa',
+          departureTime: '10:00',
+          arrivalTime: '12:00',
+          duration: '2h',
+          price: '$500',
+          date: '2026-06-15',
+          stops: 'nonstop',
+          returnDeparture: '',
+          returnArrival: '',
+          link: 'https://google.com/flights',
+          source: 'google',
+          layoverInfo: '',
+          returnDate: '',
+          priceType: '',
+          returnAirline: '',
+          returnDuration: '',
+          returnStops: '',
+          jobId: 'job1',
+        },
+      ],
+    };
+
+    const selected = new Set<string>();
+    const onToggle = () => {};
+    const onSetAll = () => {};
+    const onRemoveMany = () => {};
+    render(
+      <FlightsTable
+        state={state}
+        selected={selected}
+        onToggle={onToggle}
+        onSetAll={onSetAll}
+        onRemoveMany={onRemoveMany}
+      />
+    );
+
+    const toggleButton = screen.getByText('▶ Show all 1 flights');
+    fireEvent.click(toggleButton);
+
+    // Should have master checkbox + row checkbox
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes.length).toBe(2);
+  });
+
+  it('master checkbox calls setAll when unchecked', () => {
+    const state: StreamState = {
+      ...baseState,
+      flights: [
+        {
+          destination: 'BER',
+          airline: 'Lufthansa',
+          departureTime: '10:00',
+          arrivalTime: '12:00',
+          duration: '2h',
+          price: '$500',
+          date: '2026-06-15',
+          stops: 'nonstop',
+          returnDeparture: '',
+          returnArrival: '',
+          link: 'https://google.com/flights',
+          source: 'google',
+          layoverInfo: '',
+          returnDate: '',
+          priceType: '',
+          returnAirline: '',
+          returnDuration: '',
+          returnStops: '',
+          jobId: 'job1',
+        },
+      ],
+    };
+
+    const selected = new Set<string>();
+    const onToggle = () => {};
+    let setAllKeys: string[] = [];
+    const onSetAll = (keys: string[]) => {
+      setAllKeys = keys;
+    };
+    const onRemoveMany = () => {};
+
+    render(
+      <FlightsTable
+        state={state}
+        selected={selected}
+        onToggle={onToggle}
+        onSetAll={onSetAll}
+        onRemoveMany={onRemoveMany}
+      />
+    );
+
+    const toggleButton = screen.getByText('▶ Show all 1 flights');
+    fireEvent.click(toggleButton);
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    const masterCheckbox = checkboxes[0]; // First checkbox is the master
+    fireEvent.click(masterCheckbox);
+
+    expect(setAllKeys.length).toBeGreaterThan(0);
+  });
+
+  it('master checkbox works with partial selection', () => {
+    const state: StreamState = {
+      ...baseState,
+      flights: [
+        {
+          destination: 'BER',
+          airline: 'Lufthansa',
+          departureTime: '10:00',
+          arrivalTime: '12:00',
+          duration: '2h',
+          price: '$500',
+          date: '2026-06-15',
+          stops: 'nonstop',
+          returnDeparture: '',
+          returnArrival: '',
+          link: 'https://google.com/flights',
+          source: 'google',
+          layoverInfo: '',
+          returnDate: '',
+          priceType: '',
+          returnAirline: '',
+          returnDuration: '',
+          returnStops: '',
+          jobId: 'job1',
+        },
+        {
+          destination: 'PAR',
+          airline: 'Air France',
+          departureTime: '14:00',
+          arrivalTime: '16:00',
+          duration: '2h',
+          price: '$300',
+          date: '2026-06-16',
+          stops: '1 stop',
+          returnDeparture: '',
+          returnArrival: '',
+          link: 'https://google.com/flights2',
+          source: 'google',
+          layoverInfo: '',
+          returnDate: '',
+          priceType: '',
+          returnAirline: '',
+          returnDuration: '',
+          returnStops: '',
+          jobId: 'job2',
+        },
+      ],
+    };
+
+    const key1 = 'google|BER|2026-06-15|Lufthansa|10:00|12:00|2h|nonstop|$500|||https://google.com/flights|job1';
+    const selected = new Set<string>([key1]); // Only one selected
+    const onToggle = () => {};
+    const onSetAll = () => {};
+    const onRemoveMany = () => {};
+
+    render(
+      <FlightsTable
+        state={state}
+        selected={selected}
+        onToggle={onToggle}
+        onSetAll={onSetAll}
+        onRemoveMany={onRemoveMany}
+      />
+    );
+
+    const toggleButton = screen.getByText('▶ Show all 2 flights');
+    fireEvent.click(toggleButton);
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes.length).toBe(3); // Master + 2 rows
+
+    // Master checkbox should be indeterminate (not checked, not unchecked)
+    const masterCheckbox = checkboxes[0];
+    expect(masterCheckbox).toHaveProperty('indeterminate');
+  });
 });

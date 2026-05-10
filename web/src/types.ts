@@ -47,3 +47,23 @@ export type Flight = {
   returnDuration: string;
   returnStops: string;
 };
+
+export type ScheduleRun = {
+  startedAt: string;
+  finishedAt: string | null;
+  status: 'success' | 'failed' | 'running';
+  flightCount: number;
+  error: string | null;
+};
+
+export type Schedule = {
+  name: string;
+  cronExpression: string;
+  request: SearchRequest;
+  recipients: string[];
+  subject: string | null;
+  enabled: boolean;
+  createdAt: string;
+  lastRun: ScheduleRun | null;
+  runs: ScheduleRun[];
+};
