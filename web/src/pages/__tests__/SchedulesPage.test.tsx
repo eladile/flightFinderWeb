@@ -41,7 +41,7 @@ describe('SchedulesPage', () => {
       expect(screen.getByText('test-schedule')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('0 9 * * 1')).toBeInTheDocument();
+    expect(screen.getByText('Every Mon at 09:00')).toBeInTheDocument();
     const enabledElements = screen.getAllByText('Enabled');
     expect(enabledElements.length).toBeGreaterThan(0);
   });
@@ -76,7 +76,7 @@ describe('SchedulesPage', () => {
 
     expect(screen.getByText('New Schedule')).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Cron Expression')).toBeInTheDocument();
+    expect(screen.getByText('Schedule')).toBeInTheDocument();
   });
 
   it('deletes schedule after confirmation', async () => {

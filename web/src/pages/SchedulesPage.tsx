@@ -10,6 +10,7 @@ import {
 } from '../api/schedules';
 import { showToast } from '../lib/toast';
 import SearchForm from '../components/SearchForm';
+import SchedulePicker, { describeCron } from '../components/SchedulePicker';
 
 type ScheduleFormDialogProps = {
   open: boolean;
@@ -121,21 +122,8 @@ function ScheduleFormDialog({ open, schedule, onClose, onSaved }: ScheduleFormDi
           </div>
 
           <div>
-            <label htmlFor="cron" className="mb-1 block text-sm font-medium text-gray-700">
-              Cron Expression
-            </label>
-            <input
-              id="cron"
-              type="text"
-              value={cronExpression}
-              onChange={(e) => setCronExpression(e.target.value)}
-              placeholder="0 9 * * 1"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Examples: <code>0 9 * * 1</code> = Mondays at 9am, <code>* * * * *</code> = every
-              minute (testing)
-            </p>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Schedule</label>
+            <SchedulePicker value={cronExpression} onChange={setCronExpression} />
           </div>
 
           <div>
@@ -271,7 +259,9 @@ function ScheduleRow({ schedule, onEdit, onDelete, onTrigger }: ScheduleRowProps
   return (
     <tr className="border-b border-gray-200 hover:bg-gray-50">
       <td className="px-4 py-3 font-mono text-sm">{schedule.name}</td>
-      <td className="px-4 py-3 text-sm font-mono">{schedule.cronExpression}</td>
+      <td className="px-4 py-3 text-sm" title={schedule.cronExpression}>
+        {describeCron(schedule.cronExpression)}
+      </td>
       <td className="px-4 py-3 text-sm">
         {schedule.enabled ? (
           <span className="text-green-600">Enabled</span>
