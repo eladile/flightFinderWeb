@@ -24,6 +24,15 @@ function valueToStops(v: string): Stops {
   return parseInt(v, 10);
 }
 
+// Local-time YYYY-MM-DD. toISOString() alone would shift the date across the
+// UTC boundary for timezones ahead of it, blocking today's date in the evening.
+function todayISO(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 async function resolveCodes(codes: string[]): Promise<Airport[]> {
   const results = await Promise.all(
     codes.map(async (code) => {
@@ -57,6 +66,7 @@ export default function SearchForm({
     initial?.providers ?? ['google', 'skyscanner'],
   );
   const [error, setError] = useState<string>('');
+  const today = todayISO();
 
   useEffect(() => {
     if (!initial) return;
@@ -94,9 +104,11 @@ export default function SearchForm({
     if (destinations.length === 0) return 'Add at least one destination airport.';
     if (!outboundFrom || !outboundTo) return 'Outbound date range is required.';
     if (outboundTo < outboundFrom) return 'Outbound end date must be on or after start.';
+    if (outboundFrom < today) return 'Outbound dates cannot be in the past.';
     if (tripType === 'roundtrip') {
       if (!returnFrom || !returnTo) return 'Return date range is required for round trips.';
       if (returnTo < returnFrom) return 'Return end date must be on or after start.';
+      if (returnFrom < today) return 'Return dates cannot be in the past.';
     }
     if (providers.length === 0) return 'Select at least one provider.';
     return '';
@@ -182,6 +194,7 @@ export default function SearchForm({
           toLabel="To"
           fromValue={outboundFrom}
           toValue={outboundTo}
+          min={today}
           onChange={(f, t) => {
             setOutboundFrom(f);
             setOutboundTo(t);
@@ -197,7 +210,7 @@ export default function SearchForm({
             toLabel="To"
             fromValue={returnFrom}
             toValue={returnTo}
-            min={outboundFrom || undefined}
+            min={outboundFrom > today ? outboundFrom : today}
             onChange={(f, t) => {
               setReturnFrom(f);
               setReturnTo(t);

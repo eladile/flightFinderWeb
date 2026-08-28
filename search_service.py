@@ -169,6 +169,10 @@ def run_streaming(
                 yield JobCompletedEvent(job_id=job.id, flight_count=len(flights))
             except Exception as e:
                 failed_jobs += 1
+                log.warning(
+                    f"  job {job.id} failed: {job.origin}->{job.destination} "
+                    f"out={job.outbound_date} ret={job.return_date}: {e}"
+                )
                 yield JobFailedEvent(job_id=job.id, error=str(e))
 
     yield DoneEvent(total_flights=total_flights, failed_jobs=failed_jobs)
