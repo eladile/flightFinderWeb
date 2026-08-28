@@ -249,11 +249,12 @@ export default function FlightsTable({ state, selected, onToggle, onSetAll, onRe
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed text-left text-sm">
+            <table className="w-full min-w-[1090px] table-fixed text-left text-sm">
               <colgroup>
                 {selected && <col style={{ width: 40 }} />}
                 <col style={{ width: 90 }} />
-                <col style={{ width: 120 }} />
+                {/* wide enough for "2027-04-13 ↔ 2027-04-26" plus the px-4 padding */}
+                <col style={{ width: 220 }} />
                 <col style={{ width: 160 }} />
                 <col style={{ width: 170 }} />
                 <col style={{ width: 100 }} />
